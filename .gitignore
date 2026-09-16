@@ -63,3 +63,4 @@ source_package.bin
 .DS_Store
 Thumbs.db
 desktop.ini
+data/processed/
