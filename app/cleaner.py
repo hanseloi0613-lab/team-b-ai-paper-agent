@@ -8,6 +8,60 @@ from app.config import PROJECT_ROOT, settings
 
 
 # ============================================================
+# TEAM B - arXiv Core-100 Cleaner
+# ============================================================
+#
+# 대상:
+#
+# Human QA를 통해 선택된 신규 arXiv 35편만 처리한다.
+#
+#   rover_autonomy       12
+#   onboard_ai           11
+#   satellite_autonomy   12
+#   -----------------------
+#   TOTAL                35
+#
+#
+# 입력:
+#
+# data/selections/
+#     arxiv_core100_selected.json
+#
+# data/tmp/arxiv_resolved/
+#     <topic_axis>/
+#         <source_id>/
+#             parsed_document.json
+#
+#
+# 출력:
+#
+#             clean_content.txt
+#             cleaned_document.json
+#
+#
+# 처리:
+#
+# parsed_document
+#       ↓
+# References 제거
+# Acknowledgments/Funding 제거
+# Noise normalization
+#       ↓
+# clean_content
+#       ↓
+# Quality Gate
+#       ↓
+# SHA-256 content hash
+#       ↓
+# duplicate check
+#
+# ============================================================
+
+
+CLEANER_VERSION = "core100_v1"
+
+
+# ============================================================
 # Paths
 # ============================================================
 
@@ -18,6 +72,13 @@ RESOLVED_ROOT = (
     / "arxiv_resolved"
 )
 
+SELECTION_FILE = (
+    PROJECT_ROOT
+    / "data"
+    / "selections"
+    / "arxiv_core100_selected.json"
+)
+
 REPORT_DIR = (
     PROJECT_ROOT
     / "data"
@@ -26,7 +87,22 @@ REPORT_DIR = (
 
 REPORT_FILE = (
     REPORT_DIR
-    / "arxiv_cleaning_report.json"
+    / "arxiv_core100_cleaning_report.json"
+)
+
+
+# ============================================================
+# Expected Counts
+# ============================================================
+
+EXPECTED_COUNTS = {
+    "rover_autonomy": 12,
+    "onboard_ai": 11,
+    "satellite_autonomy": 12,
+}
+
+EXPECTED_TOTAL = sum(
+    EXPECTED_COUNTS.values()
 )
 
 
@@ -34,11 +110,16 @@ REPORT_FILE = (
 # Quality Thresholds
 # ============================================================
 #
-# 파일럿 기준.
+# 기존 파일럿 threshold 유지.
 #
-# 지금은 너무 공격적으로 필터링하지 않는다.
-# Core를 100 -> 300 -> 1,000+으로 확대하면서
-# 실제 통계를 보고 조정한다.
+# 기준을 낮춰서 억지로 PASS시키지 않는다.
+#
+# 짧은 PDF/TeX가 FAIL하면:
+#
+#   1. 실제 parsing 품질 확인
+#   2. 원 논문 자체가 짧은지 확인
+#   3. 필요하면 review pool에서 다른 논문으로 교체
+#
 # ============================================================
 
 MIN_CHAR_COUNT = 5000
@@ -76,18 +157,54 @@ REMOVE_SECTION_HEADINGS = {
 
 
 # ============================================================
+# JSON
+# ============================================================
+
+def _load_json(
+    path: Path,
+) -> dict:
+
+    if not path.exists():
+
+        raise FileNotFoundError(
+            f"JSON file not found: {path}"
+        )
+
+    return json.loads(
+        path.read_text(
+            encoding="utf-8",
+        )
+    )
+
+
+def _save_json(
+    path: Path,
+    payload: dict,
+) -> None:
+
+    path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    path.write_text(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            indent=2,
+            default=str,
+        ),
+        encoding="utf-8",
+    )
+
+
+# ============================================================
 # Basic Normalization
 # ============================================================
 
 def _normalize_unicode(
     text: str,
 ) -> str:
-    """
-    Unicode NFC 정규화.
-
-    같은 글자가 서로 다른 Unicode 조합으로
-    저장되는 문제를 줄인다.
-    """
 
     return unicodedata.normalize(
         "NFC",
@@ -98,10 +215,6 @@ def _normalize_unicode(
 def _remove_null_bytes(
     text: str,
 ) -> str:
-    """
-    PostgreSQL text column에서 문제가 될 수 있는
-    NULL 문자 제거.
-    """
 
     return text.replace(
         "\x00",
@@ -112,11 +225,6 @@ def _remove_null_bytes(
 def _normalize_spaces(
     text: str,
 ) -> str:
-    """
-    일반적인 공백 정리.
-
-    줄바꿈 구조 자체는 없애지 않는다.
-    """
 
     text = text.replace(
         "\u00a0",
@@ -145,9 +253,13 @@ def _normalize_spaces(
 def _normalize_text(
     text: str,
 ) -> str:
-    """
-    기본 문자열 정규화.
-    """
+
+    if text is None:
+        return ""
+
+    text = str(
+        text
+    )
 
     text = _normalize_unicode(
         text
@@ -171,33 +283,27 @@ def _normalize_text(
 def _normalize_heading_key(
     heading: str,
 ) -> str:
-    """
-    section heading 비교용 문자열.
-
-    예:
-    "VI. REFERENCES"
-    ->
-    "references"
-    """
 
     heading = _normalize_text(
         heading
     ).lower()
 
-    # Markdown heading residue
+    # Markdown residue
     heading = re.sub(
         r"^#+\s*",
         "",
         heading,
     )
 
-    # section 번호 제거
+    # --------------------------------------------------------
+    # Section number 제거
     #
     # 1 Introduction
     # 2. Methods
     # IV. Results
     # A. Related Work
-    #
+    # --------------------------------------------------------
+
     heading = re.sub(
         r"^\s*(?:"
         r"\d+(?:\.\d+)*"
@@ -220,9 +326,6 @@ def _normalize_heading_key(
 def _is_reference_heading(
     heading: str,
 ) -> bool:
-    """
-    References/Bibliography section인지 판단.
-    """
 
     key = _normalize_heading_key(
         heading
@@ -247,41 +350,31 @@ def _is_reference_heading(
 def _should_remove_section(
     heading: str,
 ) -> bool:
-    """
-    학습/RAG에 크게 필요하지 않은
-    back-matter section 제거.
-
-    공격적으로 제거하지 않는다.
-    """
 
     key = _normalize_heading_key(
         heading
     )
 
-    return key in REMOVE_SECTION_HEADINGS
+    return (
+        key
+        in REMOVE_SECTION_HEADINGS
+    )
 
 
 # ============================================================
-# Residue Removal
+# Inline Residue
 # ============================================================
 
 def _remove_inline_residue(
     text: str,
 ) -> str:
-    """
-    HTML 변환 과정에서 남을 수 있는
-    최소한의 noise만 제거.
-
-    논문 의미를 훼손할 정도의
-    aggressive cleaning은 하지 않는다.
-    """
 
     text = _normalize_text(
         text
     )
 
     # --------------------------------------------------------
-    # Permalink / UI residue
+    # Permalink residue
     # --------------------------------------------------------
 
     text = text.replace(
@@ -290,7 +383,7 @@ def _remove_inline_residue(
     )
 
     # --------------------------------------------------------
-    # 매우 명백한 IEEE copyright residue
+    # IEEE copyright residue
     # --------------------------------------------------------
 
     text = re.sub(
@@ -309,7 +402,7 @@ def _remove_inline_residue(
     )
 
     # --------------------------------------------------------
-    # Project-page residue
+    # Project page residue
     # --------------------------------------------------------
 
     text = re.sub(
@@ -321,9 +414,6 @@ def _remove_inline_residue(
 
     # --------------------------------------------------------
     # Thanks label residue
-    #
-    # 주의:
-    # 문장 전체를 자르지 않고 label만 정리한다.
     # --------------------------------------------------------
 
     text = re.sub(
@@ -343,20 +433,12 @@ def _remove_inline_residue(
 
 
 # ============================================================
-# Figure Caption Cleaning
+# Figure / Table Caption
 # ============================================================
 
 def _clean_figure_caption(
     text: str,
 ) -> str:
-    """
-    Figure caption은 완전히 버리지 않는다.
-
-    scientific RAG에서 figure caption은
-    실험 조건/결과 설명을 포함하는 경우가 많기 때문이다.
-
-    대신 Figure 1:, Fig. 2 등의 label만 정리한다.
-    """
 
     text = _remove_inline_residue(
         text
@@ -378,20 +460,33 @@ def _clean_figure_caption(
     return text.strip()
 
 
+def _clean_table_caption(
+    text: str,
+) -> str:
+
+    text = _remove_inline_residue(
+        text
+    )
+
+    text = re.sub(
+        r"^\s*table\s*"
+        r"[A-Za-z0-9.\-()]+"
+        r"\s*[:.\-]?\s*",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    return text.strip()
+
+
 # ============================================================
-# Equation Cleaning
+# Equation
 # ============================================================
 
 def _clean_equation(
     text: str,
 ) -> str:
-    """
-    수식은 삭제하지 않는다.
-
-    너무 aggressive한 수식 정제는
-    논문의 의미를 망칠 수 있으므로
-    공백/Unicode만 정리한다.
-    """
 
     return _normalize_text(
         text
@@ -405,79 +500,112 @@ def _clean_equation(
 def _clean_block(
     block: dict,
 ) -> dict | None:
-    """
-    parser block 하나 정제.
 
-    반환:
-    cleaned block 또는 None
-    """
-
-    block_type = block.get(
-        "type",
-        "paragraph",
+    block_type = str(
+        block.get(
+            "type",
+            "paragraph",
+        )
+        or "paragraph"
     )
 
-    text = block.get(
-        "text",
-        "",
+    text = str(
+        block.get(
+            "text",
+            "",
+        )
+        or ""
     )
 
     if not text:
         return None
 
-    # References 내부 block은 제거
+    # HTML parser bibliography marker
     if block.get(
         "in_bibliography",
         False,
     ):
+
         return None
 
-    # --------------------------------------------------------
-    # Figure caption
-    # --------------------------------------------------------
+    # ========================================================
+    # Figure Caption
+    # ========================================================
 
-    if block_type == "figure_caption":
+    if (
+        block_type
+        == "figure_caption"
+    ):
 
-        text = _clean_figure_caption(
-            text
+        text = (
+            _clean_figure_caption(
+                text
+            )
         )
 
-        # 너무 짧은 caption은 정보량이 거의 없음
         if len(text) < 20:
             return None
 
-    # --------------------------------------------------------
+    # ========================================================
+    # Table Caption
+    # ========================================================
+
+    elif (
+        block_type
+        == "table_caption"
+    ):
+
+        text = (
+            _clean_table_caption(
+                text
+            )
+        )
+
+        if len(text) < 20:
+            return None
+
+    # ========================================================
     # Equation
-    # --------------------------------------------------------
+    # ========================================================
 
-    elif block_type == "equation":
+    elif (
+        block_type
+        == "equation"
+    ):
 
-        text = _clean_equation(
-            text
+        text = (
+            _clean_equation(
+                text
+            )
         )
 
         if not text:
             return None
 
-    # --------------------------------------------------------
-    # Paragraph / List
-    # --------------------------------------------------------
+    # ========================================================
+    # Paragraph / List / Other
+    # ========================================================
 
     else:
 
-        text = _remove_inline_residue(
-            text
+        text = (
+            _remove_inline_residue(
+                text
+            )
         )
 
         if len(text) < 2:
             return None
 
-    cleaned = {
-        "type": block_type,
-        "text": text,
-    }
+    return {
+        "type": (
+            block_type
+        ),
 
-    return cleaned
+        "text": (
+            text
+        ),
+    }
 
 
 # ============================================================
@@ -486,15 +614,10 @@ def _clean_block(
 
 def _clean_sections(
     sections: list[dict],
-) -> tuple[list[dict], dict]:
-    """
-    전체 section 정제.
-
-    Returns
-    -------
-    cleaned_sections
-    section_stats
-    """
+) -> tuple[
+    list[dict],
+    dict,
+]:
 
     cleaned_sections: list[dict] = []
 
@@ -504,18 +627,23 @@ def _clean_sections(
 
     for section in sections:
 
-        heading = section.get(
-            "heading",
-            "Document Body",
+        heading = str(
+            section.get(
+                "heading",
+                "Document Body",
+            )
+            or "Document Body"
         )
 
-        heading = _normalize_text(
-            heading
+        heading = (
+            _normalize_text(
+                heading
+            )
         )
 
-        # ----------------------------------------------------
-        # References 제거
-        # ----------------------------------------------------
+        # ====================================================
+        # References / Bibliography
+        # ====================================================
 
         if (
             section.get(
@@ -528,25 +656,34 @@ def _clean_sections(
         ):
 
             removed_reference_sections += 1
-
             continue
 
-        # ----------------------------------------------------
-        # Acknowledgments 등 제거
-        # ----------------------------------------------------
+        # ====================================================
+        # Back Matter
+        # ====================================================
 
-        if _should_remove_section(
-            heading
+        if (
+            _should_remove_section(
+                heading
+            )
         ):
 
             removed_other_sections += 1
-
             continue
 
-        original_blocks = section.get(
-            "blocks",
-            [],
+        original_blocks = (
+            section.get(
+                "blocks",
+                [],
+            )
         )
+
+        if not isinstance(
+            original_blocks,
+            list,
+        ):
+
+            continue
 
         cleaned_blocks: list[dict] = []
 
@@ -554,22 +691,30 @@ def _clean_sections(
 
         for block in original_blocks:
 
-            cleaned_block = _clean_block(
-                block
+            if not isinstance(
+                block,
+                dict,
+            ):
+
+                removed_blocks += 1
+                continue
+
+            cleaned_block = (
+                _clean_block(
+                    block
+                )
             )
 
-            if cleaned_block is None:
+            if (
+                cleaned_block
+                is None
+            ):
 
                 removed_blocks += 1
                 continue
 
             # ------------------------------------------------
             # 연속 exact duplicate 제거
-            #
-            # HTML 변환기 때문에 같은 paragraph/caption이
-            # 바로 반복되는 경우만 제거한다.
-            #
-            # 문서 전체 global dedup은 하지 않는다.
             # ------------------------------------------------
 
             current_key = (
@@ -589,7 +734,9 @@ def _clean_sections(
                 removed_blocks += 1
                 continue
 
-            previous_key = current_key
+            previous_key = (
+                current_key
+            )
 
             cleaned_blocks.append(
                 cleaned_block
@@ -600,12 +747,20 @@ def _clean_sections(
 
         cleaned_sections.append(
             {
-                "heading": heading,
-                "level": section.get(
-                    "level",
-                    2,
+                "heading": (
+                    heading
                 ),
-                "blocks": cleaned_blocks,
+
+                "level": (
+                    section.get(
+                        "level",
+                        2,
+                    )
+                ),
+
+                "blocks": (
+                    cleaned_blocks
+                ),
             }
         )
 
@@ -613,9 +768,11 @@ def _clean_sections(
         "removed_reference_sections": (
             removed_reference_sections
         ),
+
         "removed_other_sections": (
             removed_other_sections
         ),
+
         "removed_blocks": (
             removed_blocks
         ),
@@ -632,15 +789,11 @@ def _clean_sections(
 # ============================================================
 
 def _render_clean_content(
+    *,
     title: str,
     abstract: str,
     sections: list[dict],
 ) -> str:
-    """
-    clean_content 생성.
-
-    section heading 구조는 유지한다.
-    """
 
     output: list[str] = []
 
@@ -686,14 +839,29 @@ def _render_clean_content(
 
     for section in sections:
 
-        heading = section[
-            "heading"
-        ]
+        heading = str(
+            section.get(
+                "heading",
+                "",
+            )
+            or ""
+        ).strip()
 
         level = section.get(
             "level",
             2,
         )
+
+        try:
+            level = int(
+                level
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            level = 2
 
         markdown_level = max(
             2,
@@ -703,46 +871,79 @@ def _render_clean_content(
             ),
         )
 
-        output.append(
-            (
-                "#" * markdown_level
+        if heading:
+
+            output.append(
+                (
+                    "#" * markdown_level
+                )
+                + " "
+                + heading
             )
-            + " "
-            + heading
-        )
 
-        output.append(
-            ""
-        )
+            output.append(
+                ""
+            )
 
-        for block in section[
-            "blocks"
-        ]:
+        for block in section.get(
+            "blocks",
+            [],
+        ):
 
-            block_type = block[
-                "type"
-            ]
+            block_type = str(
+                block.get(
+                    "type",
+                    "paragraph",
+                )
+            )
 
-            text = block[
-                "text"
-            ]
+            text = str(
+                block.get(
+                    "text",
+                    "",
+                )
+            ).strip()
 
-            if block_type == "list_item":
+            if not text:
+                continue
+
+            if (
+                block_type
+                == "list_item"
+            ):
 
                 output.append(
                     f"- {text}"
                 )
 
-            elif block_type == "figure_caption":
+            elif (
+                block_type
+                == "figure_caption"
+            ):
 
                 output.append(
-                    f"[FIGURE CAPTION] {text}"
+                    f"[FIGURE CAPTION] "
+                    f"{text}"
                 )
 
-            elif block_type == "equation":
+            elif (
+                block_type
+                == "table_caption"
+            ):
 
                 output.append(
-                    f"[EQUATION] {text}"
+                    f"[TABLE CAPTION] "
+                    f"{text}"
+                )
+
+            elif (
+                block_type
+                == "equation"
+            ):
+
+                output.append(
+                    f"[EQUATION] "
+                    f"{text}"
                 )
 
             else:
@@ -758,10 +959,6 @@ def _render_clean_content(
     result = "\n".join(
         output
     )
-
-    # --------------------------------------------------------
-    # whitespace normalization
-    # --------------------------------------------------------
 
     result = result.replace(
         "\r\n",
@@ -785,12 +982,16 @@ def _render_clean_content(
         result,
     )
 
-    result = _normalize_unicode(
-        result
+    result = (
+        _normalize_unicode(
+            result
+        )
     )
 
-    result = _remove_null_bytes(
-        result
+    result = (
+        _remove_null_bytes(
+            result
+        )
     )
 
     return result.strip()
@@ -803,11 +1004,6 @@ def _render_clean_content(
 def _content_hash(
     clean_content: str,
 ) -> str:
-    """
-    SHA-256 content hash.
-
-    DB dedup에 사용한다.
-    """
 
     return hashlib.sha256(
         clean_content.encode(
@@ -823,12 +1019,6 @@ def _content_hash(
 def _alpha_ratio(
     text: str,
 ) -> float:
-    """
-    영어 alphabet 비율.
-
-    whitespace를 제외한 문자 중
-    A-Z / a-z가 차지하는 비율.
-    """
 
     characters = [
         char
@@ -843,7 +1033,9 @@ def _alpha_ratio(
         1
         for char in characters
         if (
-            "a" <= char.lower() <= "z"
+            "a"
+            <= char.lower()
+            <= "z"
         )
     )
 
@@ -857,11 +1049,6 @@ def _quality_check(
     clean_content: str,
     sections: list[dict],
 ) -> dict:
-    """
-    Core corpus 최소 품질 검사.
-
-    지금은 파일럿용 baseline.
-    """
 
     char_count = len(
         clean_content
@@ -875,11 +1062,13 @@ def _quality_check(
         sections
     )
 
-    alpha_ratio = _alpha_ratio(
-        clean_content
+    alpha_ratio = (
+        _alpha_ratio(
+            clean_content
+        )
     )
 
-    reasons = []
+    reasons: list[str] = []
 
     if (
         char_count
@@ -917,42 +1106,229 @@ def _quality_check(
             f"section_count<{MIN_SECTION_COUNT}"
         )
 
-    passed = (
-        len(reasons)
-        == 0
-    )
-
     return {
-        "passed": passed,
-        "char_count": char_count,
-        "word_count": word_count,
+        "passed": (
+            len(reasons)
+            == 0
+        ),
+
+        "char_count": (
+            char_count
+        ),
+
+        "word_count": (
+            word_count
+        ),
+
         "section_count": (
             section_count
         ),
+
         "alpha_ratio": round(
             alpha_ratio,
             4,
         ),
-        "reasons": reasons,
+
+        "reasons": (
+            reasons
+        ),
     }
 
 
 # ============================================================
-# Load Parsed Document
+# Selection Manifest
 # ============================================================
 
-def _load_json(
-    path: Path,
-) -> dict:
-    """
-    JSON 로드.
-    """
+def _load_selection() -> dict[
+    str,
+    list[str],
+]:
 
-    return json.loads(
-        path.read_text(
-            encoding="utf-8"
+    payload = (
+        _load_json(
+            SELECTION_FILE
         )
     )
+
+    selected = (
+        payload.get(
+            "selected_documents"
+        )
+    )
+
+    if not isinstance(
+        selected,
+        dict,
+    ):
+
+        raise RuntimeError(
+            "Selection JSON does not contain "
+            "'selected_documents'."
+        )
+
+    validated = {}
+
+    seen_ids = set()
+
+    for (
+        topic_axis,
+        expected_count,
+    ) in EXPECTED_COUNTS.items():
+
+        source_ids = (
+            selected.get(
+                topic_axis
+            )
+        )
+
+        if not isinstance(
+            source_ids,
+            list,
+        ):
+
+            raise RuntimeError(
+                f"{topic_axis}: "
+                "selection is not a list."
+            )
+
+        normalized_ids = []
+
+        for source_id in source_ids:
+
+            source_id = str(
+                source_id
+            ).strip()
+
+            if not source_id:
+
+                raise RuntimeError(
+                    f"{topic_axis}: "
+                    "empty source_id."
+                )
+
+            if source_id in seen_ids:
+
+                raise RuntimeError(
+                    "Duplicate selected "
+                    f"source_id: {source_id}"
+                )
+
+            seen_ids.add(
+                source_id
+            )
+
+            normalized_ids.append(
+                source_id
+            )
+
+        if (
+            len(normalized_ids)
+            != expected_count
+        ):
+
+            raise RuntimeError(
+                f"{topic_axis}: "
+                f"expected {expected_count}, "
+                f"found "
+                f"{len(normalized_ids)}"
+            )
+
+        validated[
+            topic_axis
+        ] = normalized_ids
+
+    total = sum(
+        len(items)
+        for items
+        in validated.values()
+    )
+
+    if total != EXPECTED_TOTAL:
+
+        raise RuntimeError(
+            f"Expected "
+            f"{EXPECTED_TOTAL}, "
+            f"found {total}."
+        )
+
+    return validated
+
+
+# ============================================================
+# Find Selected Parsed Documents
+# ============================================================
+
+def _find_selected_parsed_documents(
+    selection: dict[
+        str,
+        list[str],
+    ],
+) -> list[Path]:
+
+    parsed_files = []
+
+    errors = []
+
+    for (
+        topic_axis,
+        source_ids,
+    ) in selection.items():
+
+        for source_id in source_ids:
+
+            parsed_path = (
+                RESOLVED_ROOT
+                / topic_axis
+                / source_id
+                / "parsed_document.json"
+            )
+
+            if not parsed_path.exists():
+
+                errors.append(
+                    f"{topic_axis} / "
+                    f"{source_id}"
+                )
+
+                continue
+
+            parsed_files.append(
+                parsed_path
+            )
+
+    if errors:
+
+        print()
+
+        print(
+            "Missing parsed documents:"
+        )
+
+        for item in errors:
+
+            print(
+                f"  - {item}"
+            )
+
+        raise RuntimeError(
+            f"{len(errors)} selected "
+            "parsed_document.json "
+            "file(s) missing."
+        )
+
+    if (
+        len(parsed_files)
+        != EXPECTED_TOTAL
+    ):
+
+        raise RuntimeError(
+            f"Expected "
+            f"{EXPECTED_TOTAL} parsed "
+            f"documents, found "
+            f"{len(parsed_files)}."
+        )
+
+    return parsed_files
 
 
 # ============================================================
@@ -962,88 +1338,110 @@ def _load_json(
 def clean_document(
     parsed_path: Path,
 ) -> dict:
-    """
-    parsed_document.json 한 편 정제.
 
-    parser output
-        ↓
-    clean title
-    clean abstract
-    clean sections
-        ↓
-    clean_content
-        ↓
-    quality
-        ↓
-    SHA-256
-    """
-
-    parsed = _load_json(
-        parsed_path
+    parsed = (
+        _load_json(
+            parsed_path
+        )
     )
 
-    title = _remove_inline_residue(
+    title = (
+        _remove_inline_residue(
+            parsed.get(
+                "title",
+                "",
+            )
+        )
+    )
+
+    abstract = (
+        _remove_inline_residue(
+            parsed.get(
+                "abstract",
+                "",
+            )
+        )
+    )
+
+    original_sections = (
         parsed.get(
-            "title",
-            "",
+            "sections",
+            [],
         )
     )
 
-    abstract = _remove_inline_residue(
-        parsed.get(
-            "abstract",
-            "",
+    if not isinstance(
+        original_sections,
+        list,
+    ):
+
+        raise RuntimeError(
+            "parsed_document sections "
+            "is not a list."
         )
-    )
 
-    original_sections = parsed.get(
-        "sections",
-        [],
-    )
-
-    cleaned_sections, cleaning_stats = (
-        _clean_sections(
-            original_sections
-        )
-    )
-
-    clean_content = _render_clean_content(
-        title=title,
-        abstract=abstract,
-        sections=cleaned_sections,
-    )
-
-    quality = _quality_check(
-        clean_content,
+    (
         cleaned_sections,
+        cleaning_stats,
+    ) = _clean_sections(
+        original_sections
     )
 
-    content_hash = _content_hash(
-        clean_content
+    clean_content = (
+        _render_clean_content(
+            title=title,
+            abstract=abstract,
+            sections=cleaned_sections,
+        )
     )
 
-    raw_stats = parsed.get(
-        "stats",
-        {},
+    quality = (
+        _quality_check(
+            clean_content,
+            cleaned_sections,
+        )
     )
 
-    before_chars = raw_stats.get(
-        "char_count",
-        0,
+    content_hash = (
+        _content_hash(
+            clean_content
+        )
     )
 
-    before_words = raw_stats.get(
-        "word_count",
-        0,
+    raw_stats = (
+        parsed.get(
+            "stats",
+            {},
+        )
     )
 
-    after_chars = quality[
-        "char_count"
-    ]
+    before_chars = int(
+        raw_stats.get(
+            "char_count",
+            0,
+        )
+        or 0
+    )
 
-    after_words = quality[
-        "word_count"
-    ]
+    before_words = int(
+        raw_stats.get(
+            "word_count",
+            0,
+        )
+        or 0
+    )
+
+    after_chars = int(
+        quality[
+            "char_count"
+        ]
+    )
+
+    after_words = int(
+        quality[
+            "word_count"
+        ]
+    )
 
     char_reduction_ratio = 0.0
     word_reduction_ratio = 0.0
@@ -1069,8 +1467,13 @@ def clean_document(
         )
 
     return {
-        "title": title,
-        "abstract": abstract,
+        "title": (
+            title
+        ),
+
+        "abstract": (
+            abstract
+        ),
 
         "sections": (
             cleaned_sections
@@ -1088,7 +1491,9 @@ def clean_document(
             settings.normalization_version
         ),
 
-        "quality": quality,
+        "quality": (
+            quality
+        ),
 
         "cleaning_stats": {
             **cleaning_stats,
@@ -1130,14 +1535,6 @@ def _save_cleaned_document(
     paper_dir: Path,
     cleaned: dict,
 ) -> None:
-    """
-    각 논문 폴더:
-
-    clean_content.txt
-    cleaned_document.json
-
-    생성.
-    """
 
     clean_path = (
         paper_dir
@@ -1157,21 +1554,29 @@ def _save_cleaned_document(
     )
 
     payload = {
-        "title": cleaned[
-            "title"
-        ],
+        "title": (
+            cleaned[
+                "title"
+            ]
+        ),
 
-        "abstract": cleaned[
-            "abstract"
-        ],
+        "abstract": (
+            cleaned[
+                "abstract"
+            ]
+        ),
 
-        "sections": cleaned[
-            "sections"
-        ],
+        "sections": (
+            cleaned[
+                "sections"
+            ]
+        ),
 
-        "content_hash": cleaned[
-            "content_hash"
-        ],
+        "content_hash": (
+            cleaned[
+                "content_hash"
+            ]
+        ),
 
         "normalization_version": (
             cleaned[
@@ -1179,62 +1584,37 @@ def _save_cleaned_document(
             ]
         ),
 
-        "quality": cleaned[
-            "quality"
-        ],
+        "quality": (
+            cleaned[
+                "quality"
+            ]
+        ),
 
-        "cleaning_stats": cleaned[
-            "cleaning_stats"
-        ],
+        "cleaning_stats": (
+            cleaned[
+                "cleaning_stats"
+            ]
+        ),
     }
 
-    json_path.write_text(
-        json.dumps(
-            payload,
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
+    _save_json(
+        json_path,
+        payload,
     )
 
 
 # ============================================================
-# Find Parsed Documents
-# ============================================================
-
-def _find_parsed_documents() -> list[Path]:
-    """
-    parser가 생성한 parsed_document.json 모두 탐색.
-    """
-
-    if not RESOLVED_ROOT.exists():
-
-        raise FileNotFoundError(
-            f"Resolved root not found: "
-            f"{RESOLVED_ROOT}"
-        )
-
-    return sorted(
-        RESOLVED_ROOT.glob(
-            "*/*/parsed_document.json"
-        )
-    )
-
-
-# ============================================================
-# Global Duplicate Check
+# Duplicate Check
 # ============================================================
 
 def _check_duplicate_hashes(
     results: list[dict],
 ) -> None:
-    """
-    같은 clean_content SHA-256을 가진 논문 확인.
 
-    결과 record에 duplicate_of 추가.
-    """
-
-    seen: dict[str, str] = {}
+    seen: dict[
+        str,
+        str,
+    ] = {}
 
     for result in results:
 
@@ -1246,12 +1626,16 @@ def _check_duplicate_hashes(
         ):
             continue
 
-        content_hash = result.get(
-            "content_hash"
+        content_hash = (
+            result.get(
+                "content_hash"
+            )
         )
 
-        source_id = result.get(
-            "source_id"
+        source_id = (
+            result.get(
+                "source_id"
+            )
         )
 
         if not content_hash:
@@ -1273,15 +1657,12 @@ def _check_duplicate_hashes(
 
 
 # ============================================================
-# Save Global Report
+# Save Report
 # ============================================================
 
 def _save_report(
     results: list[dict],
 ) -> None:
-    """
-    전체 cleaning report.
-    """
 
     REPORT_DIR.mkdir(
         parents=True,
@@ -1295,10 +1676,12 @@ def _save_report(
     success_count = sum(
         1
         for result in results
-        if result.get(
-            "status"
+        if (
+            result.get(
+                "status"
+            )
+            == "success"
         )
-        == "success"
     )
 
     failed_count = (
@@ -1346,10 +1729,12 @@ def _save_report(
             0,
         )
         for result in results
-        if result.get(
-            "status"
+        if (
+            result.get(
+                "status"
+            )
+            == "success"
         )
-        == "success"
     )
 
     total_after_words = sum(
@@ -1361,19 +1746,36 @@ def _save_report(
             0,
         )
         for result in results
-        if result.get(
-            "status"
+        if (
+            result.get(
+                "status"
+            )
+            == "success"
         )
-        == "success"
     )
 
     payload = {
-        "total": len(
-            results
+        "cleaner_version": (
+            CLEANER_VERSION
         ),
 
-        "success": success_count,
-        "failed": failed_count,
+        "selection_file": (
+            str(
+                SELECTION_FILE
+            )
+        ),
+
+        "total": (
+            len(results)
+        ),
+
+        "success": (
+            success_count
+        ),
+
+        "failed": (
+            failed_count
+        ),
 
         "quality_pass": (
             quality_pass_count
@@ -1399,27 +1801,28 @@ def _save_report(
             "min_char_count": (
                 MIN_CHAR_COUNT
             ),
+
             "min_word_count": (
                 MIN_WORD_COUNT
             ),
+
             "min_alpha_ratio": (
                 MIN_ALPHA_RATIO
             ),
+
             "min_section_count": (
                 MIN_SECTION_COUNT
             ),
         },
 
-        "documents": results,
+        "documents": (
+            results
+        ),
     }
 
-    REPORT_FILE.write_text(
-        json.dumps(
-            payload,
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
+    _save_json(
+        REPORT_FILE,
+        payload,
     )
 
 
@@ -1428,71 +1831,128 @@ def _save_report(
 # ============================================================
 
 def main():
-    """
-    arXiv 파일럿 15편:
-
-    parsed_document.json
-            ↓
-    references 제거
-            ↓
-    noise normalization
-            ↓
-    section 구조 보존
-            ↓
-    clean_content.txt
-            ↓
-    quality check
-            ↓
-    SHA-256
-            ↓
-    cleaned_document.json
-
-    아직 AWS INSERT는 하지 않는다.
-    """
 
     print()
     print("=" * 70)
 
     print(
-        "TEAM B - arXiv Cleaner"
+        "TEAM B - arXiv Core-100 Cleaner"
     )
 
     print("=" * 70)
 
     print(
-        f"Input root : "
+        f"Version        : "
+        f"{CLEANER_VERSION}"
+    )
+
+    print(
+        f"Input root     : "
         f"{RESOLVED_ROOT}"
     )
 
-    parsed_files = (
-        _find_parsed_documents()
+    print(
+        f"Selection file : "
+        f"{SELECTION_FILE}"
     )
 
     print(
-        f"Documents  : "
-        f"{len(parsed_files)}"
-    )
-
-    print(
-        f"Version    : "
+        f"Normalization  : "
         f"{settings.normalization_version}"
     )
 
-    if not parsed_files:
+    print()
 
-        print(
-            "No parsed_document.json files found."
+    print(
+        "Quality thresholds:"
+    )
+
+    print(
+        f"  min chars    : "
+        f"{MIN_CHAR_COUNT}"
+    )
+
+    print(
+        f"  min words    : "
+        f"{MIN_WORD_COUNT}"
+    )
+
+    print(
+        f"  alpha ratio  : "
+        f"{MIN_ALPHA_RATIO}"
+    )
+
+    print(
+        f"  min sections : "
+        f"{MIN_SECTION_COUNT}"
+    )
+
+    # ========================================================
+    # Selection / Precheck
+    # ========================================================
+
+    try:
+
+        selection = (
+            _load_selection()
         )
 
+        parsed_files = (
+            _find_selected_parsed_documents(
+                selection
+            )
+        )
+
+    except Exception as exc:
+
+        print()
+        print("=" * 70)
+
+        print(
+            "CLEANER PRECHECK FAILED"
+        )
+
+        print("=" * 70)
+
+        print(
+            f"{type(exc).__name__}: "
+            f"{exc}"
+        )
+
+        print("=" * 70)
+
         return
+
+    print()
+    print(
+        "Selected documents:"
+    )
+
+    for (
+        topic_axis,
+        source_ids,
+    ) in selection.items():
+
+        print(
+            f"  {topic_axis:22} : "
+            f"{len(source_ids)}"
+        )
+
+    print(
+        f"  {'TOTAL':22} : "
+        f"{len(parsed_files)}"
+    )
 
     results: list[dict] = []
 
     # ========================================================
-    # Clean each paper
+    # Clean Selected 35
     # ========================================================
 
-    for index, parsed_path in enumerate(
+    for (
+        index,
+        parsed_path,
+    ) in enumerate(
         parsed_files,
         start=1,
     ):
@@ -1515,23 +1975,28 @@ def main():
         print("-" * 70)
 
         print(
-            f"[{index}/{len(parsed_files)}]"
+            f"[{index}/"
+            f"{len(parsed_files)}]"
         )
 
         print(
-            f"[AXIS] {topic_axis}"
+            f"[AXIS] "
+            f"{topic_axis}"
         )
 
         print(
-            f"[ID]   {source_id}"
+            f"[ID]   "
+            f"{source_id}"
         )
 
         print("-" * 70)
 
         try:
 
-            cleaned = clean_document(
-                parsed_path
+            cleaned = (
+                clean_document(
+                    parsed_path
+                )
             )
 
             _save_cleaned_document(
@@ -1539,13 +2004,17 @@ def main():
                 cleaned,
             )
 
-            quality = cleaned[
-                "quality"
-            ]
+            quality = (
+                cleaned[
+                    "quality"
+                ]
+            )
 
-            stats = cleaned[
-                "cleaning_stats"
-            ]
+            stats = (
+                cleaned[
+                    "cleaning_stats"
+                ]
+            )
 
             quality_label = (
                 "PASS"
@@ -1594,7 +2063,7 @@ def main():
             ]:
 
                 print(
-                    f"[QUALITY] Reasons: "
+                    "[QUALITY] Reasons: "
                     f"{quality['reasons']}"
                 )
 
@@ -1610,7 +2079,9 @@ def main():
 
             results.append(
                 {
-                    "status": "success",
+                    "status": (
+                        "success"
+                    ),
 
                     "topic_axis": (
                         topic_axis
@@ -1620,9 +2091,11 @@ def main():
                         source_id
                     ),
 
-                    "title": cleaned[
-                        "title"
-                    ],
+                    "title": (
+                        cleaned[
+                            "title"
+                        ]
+                    ),
 
                     "content_hash": (
                         cleaned[
@@ -1636,7 +2109,9 @@ def main():
                         ]
                     ),
 
-                    "quality": quality,
+                    "quality": (
+                        quality
+                    ),
 
                     "cleaning_stats": (
                         stats
@@ -1664,26 +2139,32 @@ def main():
 
             results.append(
                 {
-                    "status": "failed",
+                    "status": (
+                        "failed"
+                    ),
+
                     "topic_axis": (
                         topic_axis
                     ),
+
                     "source_id": (
                         source_id
                     ),
-                    "error": str(
-                        exc
+
+                    "error": (
+                        f"{type(exc).__name__}: "
+                        f"{exc}"
                     ),
                 }
             )
 
-        # 한 편 처리할 때마다 report 저장
+        # 중간 중단되어도 진행 report 보존
         _save_report(
             results
         )
 
     # ========================================================
-    # Final Duplicate Check
+    # Final Duplicate Check / Report
     # ========================================================
 
     _check_duplicate_hashes(
@@ -1701,10 +2182,12 @@ def main():
     success_count = sum(
         1
         for item in results
-        if item.get(
-            "status"
+        if (
+            item.get(
+                "status"
+            )
+            == "success"
         )
-        == "success"
     )
 
     failed_count = (
@@ -1752,10 +2235,12 @@ def main():
             0,
         )
         for item in results
-        if item.get(
-            "status"
+        if (
+            item.get(
+                "status"
+            )
+            == "success"
         )
-        == "success"
     )
 
     after_words = sum(
@@ -1767,23 +2252,26 @@ def main():
             0,
         )
         for item in results
-        if item.get(
-            "status"
+        if (
+            item.get(
+                "status"
+            )
+            == "success"
         )
-        == "success"
     )
 
     print()
     print("=" * 70)
 
     print(
-        "Cleaning completed."
+        "ARXIV CORE-100 "
+        "CLEANING COMPLETED"
     )
 
     print("=" * 70)
 
     print(
-        f"Total        : "
+        f"Selected     : "
         f"{len(results)}"
     )
 
@@ -1841,6 +2329,66 @@ def main():
         f"Report       : "
         f"{REPORT_FILE}"
     )
+
+    print("=" * 70)
+
+    # ========================================================
+    # Final Gate
+    # ========================================================
+
+    if failed_count > 0:
+
+        print(
+            "[FAIL] Cleaner execution "
+            "errors exist."
+        )
+
+        print(
+            "Do NOT run DB Loader yet."
+        )
+
+    elif duplicate_count > 0:
+
+        print(
+            "[CHECK] Duplicate content "
+            "hash detected."
+        )
+
+        print(
+            "Do NOT run DB Loader yet."
+        )
+
+    elif quality_fail > 0:
+
+        print(
+            "[CHECK] Some selected papers "
+            "failed the Quality Gate."
+        )
+
+        print(
+            "Inspect those papers before "
+            "running DB Loader."
+        )
+
+    elif (
+        quality_pass
+        == EXPECTED_TOTAL
+    ):
+
+        print(
+            "[PASS] All 35 selected "
+            "arXiv papers passed cleaning."
+        )
+
+        print()
+        print(
+            "NEXT:"
+        )
+
+        print(
+            "Run the Core-100 "
+            "arXiv DB Loader."
+        )
 
     print("=" * 70)
 

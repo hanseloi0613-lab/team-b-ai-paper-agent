@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -10,11 +11,89 @@ from app.config import PROJECT_ROOT, settings
 
 
 # ============================================================
+# TEAM B - arXiv Core-100 DB Loader
+# ============================================================
+#
+# 현재 단계:
+#
+# 기존 AWS RDS:
+#
+#   arXiv       15
+#   NTRS        15
+#   ----------------
+#   TOTAL       30
+#
+#
+# 이번 Loader 대상:
+#
+# Human QA + Resolver + Parser + Cleaner를 모두 통과한
+# 신규 arXiv 35편만 적재한다.
+#
+#   rover_autonomy       +12
+#   onboard_ai           +11
+#   satellite_autonomy   +12
+#   ------------------------
+#   TOTAL                +35
+#
+#
+# 정상적인 최초 실행 결과:
+#
+#   arXiv       50
+#   NTRS        15
+#   ----------------
+#   TOTAL       65
+#
+#
+# 중요:
+#
+# - 기존 Pilot 15편은 다시 로드하지 않는다.
+# - data/selections/arxiv_core100_selected.json 기준
+# - quality.passed == True 필수
+# - content_hash 필수
+# - DB에 같은 content_hash가 다른 문서로 존재하면 전체 중단
+# - 모든 35편이 검증된 뒤에만 COMMIT
+# - 다시 실행해도 source+source_id UPSERT로 중복 row 생성 안 됨
+# ============================================================
+
+
+LOADER_VERSION = "core100_v1"
+
+
+# ============================================================
 # Database
 # ============================================================
 
 TABLE_SCHEMA = "public"
 TABLE_NAME = "core_documents"
+
+
+# ============================================================
+# Expected Selection
+# ============================================================
+
+EXPECTED_COUNTS = {
+    "rover_autonomy": 12,
+    "onboard_ai": 11,
+    "satellite_autonomy": 12,
+}
+
+EXPECTED_TOTAL = sum(
+    EXPECTED_COUNTS.values()
+)
+
+
+# ============================================================
+# Expected First-Run DB State
+# ============================================================
+
+EXPECTED_FIRST_RUN_ROWS_BEFORE = 30
+EXPECTED_FIRST_RUN_ROWS_AFTER = 65
+
+EXPECTED_FIRST_RUN_ARXIV_BEFORE = 15
+EXPECTED_FIRST_RUN_ARXIV_AFTER = 50
+
+EXPECTED_FIRST_RUN_NTRS_BEFORE = 15
+EXPECTED_FIRST_RUN_NTRS_AFTER = 15
 
 
 # ============================================================
@@ -28,11 +107,19 @@ RESOLVED_ROOT = (
     / "arxiv_resolved"
 )
 
-ARXIV_CACHE_ROOT = (
+SELECTION_FILE = (
+    PROJECT_ROOT
+    / "data"
+    / "selections"
+    / "arxiv_core100_selected.json"
+)
+
+ARXIV_CORE100_CACHE_ROOT = (
     PROJECT_ROOT
     / "data"
     / "cache"
     / "arxiv"
+    / "core100_v1"
 )
 
 REPORT_DIR = (
@@ -43,7 +130,7 @@ REPORT_DIR = (
 
 REPORT_FILE = (
     REPORT_DIR
-    / "arxiv_db_loading_report.json"
+    / "arxiv_core100_db_loading_report.json"
 )
 
 
@@ -82,13 +169,16 @@ REQUIRED_COLUMNS = {
 def _load_json(
     path: Path,
 ) -> dict:
-    """
-    JSON 파일 로드.
-    """
+
+    if not path.exists():
+
+        raise FileNotFoundError(
+            f"JSON file not found: {path}"
+        )
 
     return json.loads(
         path.read_text(
-            encoding="utf-8"
+            encoding="utf-8",
         )
     )
 
@@ -97,9 +187,6 @@ def _save_json(
     path: Path,
     payload: dict,
 ) -> None:
-    """
-    JSON report 저장.
-    """
 
     path.parent.mkdir(
         parents=True,
@@ -118,70 +205,335 @@ def _save_json(
 
 
 # ============================================================
-# arXiv ID Helpers
+# arXiv ID
 # ============================================================
 
 def _strip_version(
     source_id: str,
 ) -> str:
-    """
-    arXiv version 제거.
-
-    2401.11371v1
-    ->
-    2401.11371
-    """
-
-    import re
 
     return re.sub(
         r"v\d+$",
         "",
-        source_id,
+        str(
+            source_id
+        ).strip(),
     )
 
 
 # ============================================================
-# Find Cleaned Documents
+# Selection Manifest
 # ============================================================
 
-def _find_cleaned_documents() -> list[Path]:
-    """
-    cleaner가 성공적으로 만든
-    cleaned_document.json을 모두 찾는다.
+def _load_selection() -> dict[
+    str,
+    list[str],
+]:
 
-    현재 파일럿에서는 15개가 나와야 한다.
-    """
+    payload = (
+        _load_json(
+            SELECTION_FILE
+        )
+    )
 
-    if not RESOLVED_ROOT.exists():
+    selected = (
+        payload.get(
+            "selected_documents"
+        )
+    )
+
+    if not isinstance(
+        selected,
+        dict,
+    ):
+
+        raise RuntimeError(
+            "Selection JSON does not contain "
+            "'selected_documents'."
+        )
+
+    result = {}
+
+    seen_base_ids = set()
+
+    for (
+        topic_axis,
+        expected_count,
+    ) in EXPECTED_COUNTS.items():
+
+        source_ids = (
+            selected.get(
+                topic_axis
+            )
+        )
+
+        if not isinstance(
+            source_ids,
+            list,
+        ):
+
+            raise RuntimeError(
+                f"{topic_axis}: "
+                "selection is not a list."
+            )
+
+        normalized_ids = []
+
+        for source_id in source_ids:
+
+            source_id = str(
+                source_id
+            ).strip()
+
+            if not source_id:
+
+                raise RuntimeError(
+                    f"{topic_axis}: "
+                    "empty source_id."
+                )
+
+            base_id = (
+                _strip_version(
+                    source_id
+                )
+            )
+
+            if base_id in seen_base_ids:
+
+                raise RuntimeError(
+                    "Duplicate arXiv paper "
+                    f"in selection: {source_id}"
+                )
+
+            seen_base_ids.add(
+                base_id
+            )
+
+            normalized_ids.append(
+                source_id
+            )
+
+        if (
+            len(normalized_ids)
+            != expected_count
+        ):
+
+            raise RuntimeError(
+                f"{topic_axis}: "
+                f"expected {expected_count}, "
+                f"found "
+                f"{len(normalized_ids)}"
+            )
+
+        result[
+            topic_axis
+        ] = normalized_ids
+
+    total = sum(
+        len(items)
+        for items
+        in result.values()
+    )
+
+    if total != EXPECTED_TOTAL:
+
+        raise RuntimeError(
+            f"Expected "
+            f"{EXPECTED_TOTAL} selected papers, "
+            f"found {total}."
+        )
+
+    return result
+
+
+# ============================================================
+# Paper Directory
+# ============================================================
+
+def _find_paper_dir(
+    topic_axis: str,
+    source_id: str,
+) -> Path:
+
+    axis_dir = (
+        RESOLVED_ROOT
+        / topic_axis
+    )
+
+    exact_dir = (
+        axis_dir
+        / source_id
+    )
+
+    if exact_dir.exists():
+
+        return exact_dir
+
+    if not axis_dir.exists():
 
         raise FileNotFoundError(
-            f"Resolved directory not found: "
-            f"{RESOLVED_ROOT}"
+            f"Axis directory not found: "
+            f"{axis_dir}"
         )
 
-    return sorted(
-        RESOLVED_ROOT.glob(
-            "*/*/cleaned_document.json"
+    wanted_base = (
+        _strip_version(
+            source_id
         )
+    )
+
+    matches = []
+
+    for child in axis_dir.iterdir():
+
+        if not child.is_dir():
+            continue
+
+        if (
+            _strip_version(
+                child.name
+            )
+            == wanted_base
+        ):
+
+            matches.append(
+                child
+            )
+
+    if len(matches) == 1:
+
+        return matches[0]
+
+    if len(matches) > 1:
+
+        raise RuntimeError(
+            f"Multiple directories match "
+            f"{source_id}: "
+            f"{[item.name for item in matches]}"
+        )
+
+    raise FileNotFoundError(
+        "Resolved paper directory "
+        f"not found: "
+        f"{topic_axis} / {source_id}"
     )
 
 
 # ============================================================
-# Metadata Cache
+# Find Selected Cleaned Documents
+# ============================================================
+
+def _find_selected_cleaned_documents(
+    selection: dict[
+        str,
+        list[str],
+    ],
+) -> list[Path]:
+
+    cleaned_files = []
+
+    errors = []
+
+    for (
+        topic_axis,
+        source_ids,
+    ) in selection.items():
+
+        for source_id in source_ids:
+
+            try:
+
+                paper_dir = (
+                    _find_paper_dir(
+                        topic_axis,
+                        source_id,
+                    )
+                )
+
+            except Exception as exc:
+
+                errors.append(
+                    (
+                        topic_axis,
+                        source_id,
+                        str(exc),
+                    )
+                )
+
+                continue
+
+            cleaned_path = (
+                paper_dir
+                / "cleaned_document.json"
+            )
+
+            if not cleaned_path.exists():
+
+                errors.append(
+                    (
+                        topic_axis,
+                        source_id,
+                        "cleaned_document.json missing",
+                    )
+                )
+
+                continue
+
+            cleaned_files.append(
+                cleaned_path
+            )
+
+    if errors:
+
+        print()
+        print(
+            "Missing / invalid cleaned documents:"
+        )
+
+        for (
+            topic_axis,
+            source_id,
+            error,
+        ) in errors:
+
+            print(
+                f"  {topic_axis} / "
+                f"{source_id}"
+            )
+
+            print(
+                f"    -> {error}"
+            )
+
+        raise RuntimeError(
+            f"{len(errors)} selected "
+            "document(s) failed local precheck."
+        )
+
+    if (
+        len(cleaned_files)
+        != EXPECTED_TOTAL
+    ):
+
+        raise RuntimeError(
+            f"Expected "
+            f"{EXPECTED_TOTAL} cleaned documents, "
+            f"found {len(cleaned_files)}."
+        )
+
+    return cleaned_files
+
+
+# ============================================================
+# Core-100 Metadata Cache
 # ============================================================
 
 def _load_axis_metadata(
     topic_axis: str,
 ) -> list[dict]:
-    """
-    collector가 생성한 axis별 merged metadata 읽기.
-
-    data/cache/arxiv/<axis>/_merged_candidates.json
-    """
 
     path = (
-        ARXIV_CACHE_ROOT
+        ARXIV_CORE100_CACHE_ROOT
         / topic_axis
         / "_merged_candidates.json"
     )
@@ -189,44 +541,77 @@ def _load_axis_metadata(
     if not path.exists():
 
         raise FileNotFoundError(
-            f"Metadata cache not found: {path}"
+            f"Core-100 metadata cache "
+            f"not found: {path}"
         )
 
-    payload = _load_json(
-        path
+    payload = (
+        _load_json(
+            path
+        )
     )
 
-    return payload.get(
-        "documents",
-        [],
+    documents = (
+        payload.get(
+            "documents",
+            []
+        )
     )
+
+    if not isinstance(
+        documents,
+        list,
+    ):
+
+        raise RuntimeError(
+            f"Invalid metadata cache: {path}"
+        )
+
+    return documents
 
 
 def _find_metadata(
     topic_axis: str,
     source_id: str,
 ) -> dict:
-    """
-    source_id에 해당하는 arXiv metadata 찾기.
-    """
 
-    documents = _load_axis_metadata(
-        topic_axis
+    documents = (
+        _load_axis_metadata(
+            topic_axis
+        )
     )
 
-    wanted_base = _strip_version(
-        source_id
+    wanted_base = (
+        _strip_version(
+            source_id
+        )
     )
 
+    # exact version 우선
     for document in documents:
 
-        candidate_id = document.get(
-            "source_id",
-            "",
-        )
+        candidate_id = str(
+            document.get(
+                "source_id",
+                "",
+            )
+            or ""
+        ).strip()
 
         if candidate_id == source_id:
+
             return document
+
+    # base ID fallback
+    for document in documents:
+
+        candidate_id = str(
+            document.get(
+                "source_id",
+                "",
+            )
+            or ""
+        ).strip()
 
         if (
             _strip_version(
@@ -234,24 +619,22 @@ def _find_metadata(
             )
             == wanted_base
         ):
+
             return document
 
     raise LookupError(
-        f"Metadata not found: "
+        "Core-100 metadata not found: "
         f"{topic_axis} / {source_id}"
     )
 
 
 # ============================================================
-# Resolution Metadata
+# Resolution
 # ============================================================
 
 def _load_resolution(
     paper_dir: Path,
 ) -> dict:
-    """
-    Content Resolver 결과 읽기.
-    """
 
     path = (
         paper_dir
@@ -259,10 +642,47 @@ def _load_resolution(
     )
 
     if not path.exists():
-        return {}
+
+        raise FileNotFoundError(
+            f"resolution.json missing: "
+            f"{path}"
+        )
 
     return _load_json(
         path
+    )
+
+
+# ============================================================
+# Parser Provenance
+# ============================================================
+
+def _parser_name(
+    selected_format: str | None,
+) -> str:
+
+    selected_format = str(
+        selected_format
+        or ""
+    ).strip().lower()
+
+    mapping = {
+        "html": (
+            "arxiv_html_parser_v2"
+        ),
+
+        "tex": (
+            "arxiv_tex_parser_v1"
+        ),
+
+        "pdf": (
+            "arxiv_pdf_parser_v1"
+        ),
+    }
+
+    return mapping.get(
+        selected_format,
+        "arxiv_parser_unknown",
     )
 
 
@@ -273,13 +693,6 @@ def _load_resolution(
 def _get_column_info(
     conn: psycopg.Connection,
 ) -> dict[str, dict]:
-    """
-    실제 AWS PostgreSQL의 core_documents
-    컬럼 타입을 확인한다.
-
-    authors/categories가 JSONB인지 TEXT[]인지
-    코드가 추측하지 않고 DB에서 확인한다.
-    """
 
     sql = """
     SELECT
@@ -304,15 +717,16 @@ def _get_column_info(
             ),
         )
 
-        rows = cur.fetchall()
+        rows = (
+            cur.fetchall()
+        )
 
     if not rows:
 
         raise RuntimeError(
             f"Table not found: "
             f"{TABLE_SCHEMA}.{TABLE_NAME}\n"
-            f"먼저 sql/002_schema.sql이 "
-            f"AWS RDS에 실행됐는지 확인하세요."
+            "Run sql/002_schema.sql first."
         )
 
     result = {}
@@ -330,11 +744,18 @@ def _get_column_info(
         result[
             column_name
         ] = {
-            "data_type": data_type,
-            "udt_name": udt_name,
+            "data_type": (
+                data_type
+            ),
+
+            "udt_name": (
+                udt_name
+            ),
+
             "is_nullable": (
                 is_nullable
             ),
+
             "column_default": (
                 column_default
             ),
@@ -346,10 +767,6 @@ def _get_column_info(
 def _validate_schema(
     column_info: dict[str, dict],
 ) -> None:
-    """
-    loader가 필요로 하는 컬럼이
-    DB에 실제로 존재하는지 확인.
-    """
 
     existing_columns = set(
         column_info.keys()
@@ -362,17 +779,10 @@ def _validate_schema(
 
     if missing:
 
-        missing_text = ", ".join(
-            sorted(
-                missing
-            )
-        )
-
         raise RuntimeError(
-            "core_documents schema가 "
-            "현재 loader와 맞지 않습니다.\n"
+            "core_documents schema mismatch.\n"
             f"Missing columns: "
-            f"{missing_text}"
+            f"{', '.join(sorted(missing))}"
         )
 
 
@@ -384,21 +794,8 @@ def _adapt_collection(
     value: list | dict,
     column: dict,
 ) -> Any:
-    """
-    authors/categories/metadata 값을
-    실제 PostgreSQL column type에 맞춘다.
 
-    JSONB
-        -> Jsonb
-
-    ARRAY
-        -> Python list
-
-    TEXT/VARCHAR
-        -> JSON string
-    """
-
-    data_type = (
+    data_type = str(
         column.get(
             "data_type",
             "",
@@ -406,17 +803,13 @@ def _adapt_collection(
         or ""
     ).lower()
 
-    udt_name = (
+    udt_name = str(
         column.get(
             "udt_name",
             "",
         )
         or ""
     ).lower()
-
-    # --------------------------------------------------------
-    # JSON / JSONB
-    # --------------------------------------------------------
 
     if data_type in {
         "json",
@@ -426,10 +819,6 @@ def _adapt_collection(
         return Jsonb(
             value
         )
-
-    # --------------------------------------------------------
-    # PostgreSQL ARRAY
-    # --------------------------------------------------------
 
     if (
         data_type == "array"
@@ -442,15 +831,14 @@ def _adapt_collection(
             value,
             list,
         ):
+
             return value
 
         return [
-            str(value)
+            str(
+                value
+            )
         ]
-
-    # --------------------------------------------------------
-    # TEXT / VARCHAR fallback
-    # --------------------------------------------------------
 
     return json.dumps(
         value,
@@ -466,9 +854,6 @@ def _adapt_collection(
 def _parse_date(
     value: str | None,
 ) -> date | None:
-    """
-    YYYY-MM-DD -> date
-    """
 
     if not value:
         return None
@@ -476,7 +861,9 @@ def _parse_date(
     try:
 
         return date.fromisoformat(
-            value[:10]
+            str(
+                value
+            )[:10]
         )
 
     except ValueError:
@@ -491,17 +878,6 @@ def _parse_date(
 def _build_document(
     cleaned_path: Path,
 ) -> dict:
-    """
-    한 논문에 필요한 모든 정보를 합친다.
-
-    sources:
-
-    1. merged arXiv metadata
-    2. resolution.json
-    3. raw_content.txt
-    4. clean_content.txt
-    5. cleaned_document.json
-    """
 
     paper_dir = (
         cleaned_path.parent
@@ -513,24 +889,30 @@ def _build_document(
         .name
     )
 
-    cleaned = _load_json(
-        cleaned_path
+    cleaned = (
+        _load_json(
+            cleaned_path
+        )
     )
 
-    resolution = _load_resolution(
-        paper_dir
+    resolution = (
+        _load_resolution(
+            paper_dir
+        )
     )
 
-    source_id = (
+    source_id = str(
         resolution.get(
             "source_id"
         )
         or paper_dir.name
-    )
+    ).strip()
 
-    metadata = _find_metadata(
-        topic_axis,
-        source_id,
+    metadata = (
+        _find_metadata(
+            topic_axis,
+            source_id,
+        )
     )
 
     raw_path = (
@@ -559,19 +941,21 @@ def _build_document(
 
     raw_content = (
         raw_path.read_text(
-            encoding="utf-8"
+            encoding="utf-8",
         )
     )
 
     clean_content = (
         clean_path.read_text(
-            encoding="utf-8"
+            encoding="utf-8",
         )
     )
 
-    quality = cleaned.get(
-        "quality",
-        {},
+    quality = (
+        cleaned.get(
+            "quality",
+            {},
+        )
     )
 
     if not quality.get(
@@ -580,28 +964,46 @@ def _build_document(
     ):
 
         raise ValueError(
-            f"Quality check failed: "
+            "Quality check failed: "
             f"{source_id}"
         )
 
-    content_hash = cleaned.get(
-        "content_hash"
+    content_hash = (
+        cleaned.get(
+            "content_hash"
+        )
     )
 
     if not content_hash:
 
         raise ValueError(
-            f"content_hash missing: "
+            "content_hash missing: "
+            f"{source_id}"
+        )
+
+    if not clean_content.strip():
+
+        raise ValueError(
+            "clean_content empty: "
+            f"{source_id}"
+        )
+
+    if not raw_content.strip():
+
+        raise ValueError(
+            "raw_content empty: "
             f"{source_id}"
         )
 
     # ========================================================
-    # Extra provenance information
+    # Metadata / Provenance
     # ========================================================
 
-    original_metadata = metadata.get(
-        "metadata",
-        {},
+    original_metadata = (
+        metadata.get(
+            "metadata",
+            {},
+        )
     )
 
     if not isinstance(
@@ -615,23 +1017,34 @@ def _build_document(
             )
         }
 
+    selected_format = (
+        resolution.get(
+            "selected_format"
+        )
+    )
+
     db_metadata = {
         **original_metadata,
 
-        "matched_queries": metadata.get(
-            "matched_queries",
-            [],
+        "matched_queries": (
+            metadata.get(
+                "matched_queries",
+                [],
+            )
         ),
 
-        "source_base_id": metadata.get(
-            "source_base_id"
+        "source_base_id": (
+            metadata.get(
+                "source_base_id"
+            )
+            or _strip_version(
+                source_id
+            )
         ),
 
         "content_resolution": {
             "selected_format": (
-                resolution.get(
-                    "selected_format"
-                )
+                selected_format
             ),
 
             "source_url": (
@@ -639,18 +1052,34 @@ def _build_document(
                     "source_url"
                 )
             ),
+
+            "repair": (
+                resolution.get(
+                    "repair"
+                )
+            ),
         },
 
-        "quality": quality,
+        "quality": (
+            quality
+        ),
 
-        "cleaning_stats": cleaned.get(
-            "cleaning_stats",
-            {},
+        "cleaning_stats": (
+            cleaned.get(
+                "cleaning_stats",
+                {},
+            )
         ),
 
         "pipeline": {
+            "selection": (
+                "arxiv_core100_selected"
+            ),
+
             "parser": (
-                "arxiv_html_parser_v2"
+                _parser_name(
+                    selected_format
+                )
             ),
 
             "normalization_version": (
@@ -660,7 +1089,7 @@ def _build_document(
             ),
 
             "loader": (
-                "arxiv_db_loader_v1"
+                LOADER_VERSION
             ),
         },
     }
@@ -673,7 +1102,9 @@ def _build_document(
             or "arxiv"
         ),
 
-        "source_id": source_id,
+        "source_id": (
+            source_id
+        ),
 
         "title": (
             cleaned.get(
@@ -695,14 +1126,18 @@ def _build_document(
             or ""
         ),
 
-        "authors": metadata.get(
-            "authors",
-            [],
+        "authors": (
+            metadata.get(
+                "authors",
+                [],
+            )
         ),
 
-        "categories": metadata.get(
-            "categories",
-            [],
+        "categories": (
+            metadata.get(
+                "categories",
+                [],
+            )
         ),
 
         "published_at": (
@@ -720,19 +1155,27 @@ def _build_document(
             or "arxiv_preprint"
         ),
 
-        "doi": metadata.get(
-            "doi"
+        "doi": (
+            metadata.get(
+                "doi"
+            )
         ),
 
-        "url": metadata.get(
-            "url"
+        "url": (
+            metadata.get(
+                "url"
+            )
         ),
 
-        "pdf_url": metadata.get(
-            "pdf_url"
+        "pdf_url": (
+            metadata.get(
+                "pdf_url"
+            )
         ),
 
-        "topic_axis": topic_axis,
+        "topic_axis": (
+            topic_axis
+        ),
 
         "language": (
             metadata.get(
@@ -741,7 +1184,9 @@ def _build_document(
             or "en"
         ),
 
-        "raw_content": raw_content,
+        "raw_content": (
+            raw_content
+        ),
 
         "clean_content": (
             clean_content
@@ -762,44 +1207,115 @@ def _build_document(
             clean_content
         ),
 
-        # parser + cleaner가 모두 성공했다는 의미
-        "parse_status": "success",
+        "parse_status": (
+            "success"
+        ),
 
-        "metadata": db_metadata,
+        "metadata": (
+            db_metadata
+        ),
     }
 
 
 # ============================================================
-# Load All Local Documents
+# Load Selected Local Documents
 # ============================================================
 
-def _load_local_documents() -> list[dict]:
-    """
-    현재 정제 완료된 논문을 전부 DB record로 구성한다.
-    """
+def _load_local_documents(
+    selection: dict[
+        str,
+        list[str],
+    ],
+) -> list[dict]:
 
     cleaned_files = (
-        _find_cleaned_documents()
+        _find_selected_cleaned_documents(
+            selection
+        )
     )
 
     print(
-        f"[LOCAL] Cleaned documents: "
+        f"[LOCAL] Selected cleaned documents: "
         f"{len(cleaned_files)}"
     )
 
     documents = []
 
-    for cleaned_path in cleaned_files:
+    for (
+        index,
+        cleaned_path,
+    ) in enumerate(
+        cleaned_files,
+        start=1,
+    ):
 
-        document = _build_document(
-            cleaned_path
+        document = (
+            _build_document(
+                cleaned_path
+            )
         )
 
         documents.append(
             document
         )
 
+        print(
+            f"[LOCAL {index:02d}/"
+            f"{len(cleaned_files)}] "
+            f"{document['topic_axis']} | "
+            f"{document['source_id']} | "
+            f"{document['char_count']} chars"
+        )
+
+    if (
+        len(documents)
+        != EXPECTED_TOTAL
+    ):
+
+        raise RuntimeError(
+            f"Expected "
+            f"{EXPECTED_TOTAL} local DB records, "
+            f"found {len(documents)}."
+        )
+
     return documents
+
+
+# ============================================================
+# Local Hash QA
+# ============================================================
+
+def _validate_local_hashes(
+    documents: list[dict],
+) -> None:
+
+    seen = {}
+
+    for document in documents:
+
+        content_hash = (
+            document[
+                "content_hash"
+            ]
+        )
+
+        source_id = (
+            document[
+                "source_id"
+            ]
+        )
+
+        if content_hash in seen:
+
+            raise RuntimeError(
+                "Local duplicate content hash:\n"
+                f"{seen[content_hash]} "
+                f"<-> {source_id}"
+            )
+
+        seen[
+            content_hash
+        ] = source_id
 
 
 # ============================================================
@@ -811,9 +1327,6 @@ def _find_existing_source(
     source: str,
     source_id: str,
 ) -> int | None:
-    """
-    같은 source + source_id가 이미 DB에 있는지 확인.
-    """
 
     sql = f"""
     SELECT id
@@ -833,7 +1346,9 @@ def _find_existing_source(
             ),
         )
 
-        row = cur.fetchone()
+        row = (
+            cur.fetchone()
+        )
 
     if row is None:
         return None
@@ -846,10 +1361,11 @@ def _find_existing_source(
 def _find_hash_owner(
     conn: psycopg.Connection,
     content_hash: str,
-) -> tuple[int, str, str] | None:
-    """
-    DB에 같은 clean_content hash가 존재하는지 확인.
-    """
+) -> tuple[
+    int,
+    str,
+    str,
+] | None:
 
     sql = f"""
     SELECT
@@ -870,7 +1386,9 @@ def _find_hash_owner(
             ),
         )
 
-        row = cur.fetchone()
+        row = (
+            cur.fetchone()
+        )
 
     if row is None:
         return None
@@ -897,38 +1415,38 @@ def _upsert_document(
     document: dict,
     column_info: dict[str, dict],
 ) -> int:
-    """
-    source + source_id 기준 UPSERT.
 
-    같은 arXiv 논문을 loader를 다시 실행해도
-    row가 중복 생성되지 않는다.
-    """
-
-    authors = _adapt_collection(
-        document[
-            "authors"
-        ],
-        column_info[
-            "authors"
-        ],
+    authors = (
+        _adapt_collection(
+            document[
+                "authors"
+            ],
+            column_info[
+                "authors"
+            ],
+        )
     )
 
-    categories = _adapt_collection(
-        document[
-            "categories"
-        ],
-        column_info[
-            "categories"
-        ],
+    categories = (
+        _adapt_collection(
+            document[
+                "categories"
+            ],
+            column_info[
+                "categories"
+            ],
+        )
     )
 
-    metadata = _adapt_collection(
-        document[
-            "metadata"
-        ],
-        column_info[
-            "metadata"
-        ],
+    metadata = (
+        _adapt_collection(
+            document[
+                "metadata"
+            ],
+            column_info[
+                "metadata"
+            ],
+        )
     )
 
     update_timestamp = ""
@@ -999,75 +1517,56 @@ def _upsert_document(
         document[
             "source"
         ],
-
         document[
             "source_id"
         ],
-
         document[
             "title"
         ],
-
         document[
             "abstract"
         ],
-
         authors,
-
         categories,
-
         document[
             "published_at"
         ],
-
         document[
             "document_type"
         ],
-
         document[
             "doi"
         ],
-
         document[
             "url"
         ],
-
         document[
             "pdf_url"
         ],
-
         document[
             "topic_axis"
         ],
-
         document[
             "language"
         ],
-
         document[
             "raw_content"
         ],
-
         document[
             "clean_content"
         ],
-
         document[
             "content_hash"
         ],
-
         document[
             "normalization_version"
         ],
-
         document[
             "char_count"
         ],
-
         document[
             "parse_status"
         ],
-
         metadata,
     )
 
@@ -1078,12 +1577,14 @@ def _upsert_document(
             values,
         )
 
-        row = cur.fetchone()
+        row = (
+            cur.fetchone()
+        )
 
     if row is None:
 
         raise RuntimeError(
-            f"UPSERT did not return id: "
+            "UPSERT did not return id: "
             f"{document['source_id']}"
         )
 
@@ -1093,15 +1594,12 @@ def _upsert_document(
 
 
 # ============================================================
-# DB Counts
+# Counts
 # ============================================================
 
 def _count_core_documents(
     conn: psycopg.Connection,
 ) -> int:
-    """
-    현재 DB core_documents 총 row 수.
-    """
 
     sql = f"""
     SELECT COUNT(*)
@@ -1114,7 +1612,38 @@ def _count_core_documents(
             sql
         )
 
-        row = cur.fetchone()
+        row = (
+            cur.fetchone()
+        )
+
+    return int(
+        row[0]
+    )
+
+
+def _count_source_documents(
+    conn: psycopg.Connection,
+    source: str,
+) -> int:
+
+    sql = f"""
+    SELECT COUNT(*)
+    FROM {TABLE_SCHEMA}.{TABLE_NAME}
+    WHERE source = %s
+    """
+
+    with conn.cursor() as cur:
+
+        cur.execute(
+            sql,
+            (
+                source,
+            ),
+        )
+
+        row = (
+            cur.fetchone()
+        )
 
     return int(
         row[0]
@@ -1122,15 +1651,134 @@ def _count_core_documents(
 
 
 # ============================================================
-# DB Summary
+# Verify Selected 35 In DB
+# ============================================================
+
+def _verify_selected_documents(
+    conn: psycopg.Connection,
+    documents: list[dict],
+) -> dict:
+
+    missing = []
+
+    hash_mismatch = []
+
+    axis_mismatch = []
+
+    for document in documents:
+
+        sql = f"""
+        SELECT
+            id,
+            content_hash,
+            topic_axis
+        FROM {TABLE_SCHEMA}.{TABLE_NAME}
+        WHERE source = %s
+          AND source_id = %s
+        LIMIT 1
+        """
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                sql,
+                (
+                    document[
+                        "source"
+                    ],
+                    document[
+                        "source_id"
+                    ],
+                ),
+            )
+
+            row = (
+                cur.fetchone()
+            )
+
+        if row is None:
+
+            missing.append(
+                document[
+                    "source_id"
+                ]
+            )
+
+            continue
+
+        (
+            _db_id,
+            db_hash,
+            db_axis,
+        ) = row
+
+        if (
+            str(
+                db_hash
+            )
+            != document[
+                "content_hash"
+            ]
+        ):
+
+            hash_mismatch.append(
+                document[
+                    "source_id"
+                ]
+            )
+
+        if (
+            str(
+                db_axis
+            )
+            != document[
+                "topic_axis"
+            ]
+        ):
+
+            axis_mismatch.append(
+                document[
+                    "source_id"
+                ]
+            )
+
+    verified_count = (
+        len(documents)
+        - len(missing)
+        - len(hash_mismatch)
+        - len(axis_mismatch)
+    )
+
+    return {
+        "total": (
+            len(documents)
+        ),
+
+        "verified": (
+            verified_count
+        ),
+
+        "missing": (
+            missing
+        ),
+
+        "hash_mismatch": (
+            hash_mismatch
+        ),
+
+        "axis_mismatch": (
+            axis_mismatch
+        ),
+    }
+
+
+# ============================================================
+# Database Summary
 # ============================================================
 
 def _print_database_summary(
     conn: psycopg.Connection,
 ) -> None:
-    """
-    INSERT 완료 후 axis별 개수 확인.
-    """
 
     sql = f"""
     SELECT
@@ -1148,7 +1796,11 @@ def _print_database_summary(
 
     print()
     print("=" * 70)
-    print("DATABASE SUMMARY")
+
+    print(
+        "DATABASE SUMMARY"
+    )
+
     print("=" * 70)
 
     with conn.cursor() as cur:
@@ -1157,7 +1809,9 @@ def _print_database_summary(
             sql
         )
 
-        rows = cur.fetchall()
+        rows = (
+            cur.fetchall()
+        )
 
     for (
         source,
@@ -1177,48 +1831,79 @@ def _print_database_summary(
 # ============================================================
 
 def main():
-    """
-    현재 파일럿 arXiv 15편을 AWS RDS에 적재한다.
-
-    Pipeline:
-
-    merged metadata
-        +
-    raw_content.txt
-        +
-    clean_content.txt
-        +
-    cleaned_document.json
-        ↓
-    schema validation
-        ↓
-    content_hash duplicate check
-        ↓
-    source + source_id UPSERT
-        ↓
-    AWS RDS core_documents
-    """
 
     print()
     print("=" * 70)
-    print("TEAM B - arXiv DB Loader")
-    print("=" * 70)
 
-    # ========================================================
-    # Local Files
-    # ========================================================
-
-    documents = (
-        _load_local_documents()
+    print(
+        "TEAM B - arXiv Core-100 DB Loader"
     )
 
-    if not documents:
+    print("=" * 70)
+
+    print(
+        f"Version        : "
+        f"{LOADER_VERSION}"
+    )
+
+    print(
+        f"Selection file : "
+        f"{SELECTION_FILE}"
+    )
+
+    print(
+        f"Resolved root  : "
+        f"{RESOLVED_ROOT}"
+    )
+
+    print(
+        f"Metadata root  : "
+        f"{ARXIV_CORE100_CACHE_ROOT}"
+    )
+
+    # ========================================================
+    # Local Preflight
+    # ========================================================
+
+    selection = (
+        _load_selection()
+    )
+
+    print()
+    print(
+        "Selected documents:"
+    )
+
+    for (
+        topic_axis,
+        source_ids,
+    ) in selection.items():
 
         print(
-            "No cleaned documents found."
+            f"  {topic_axis:22} : "
+            f"{len(source_ids)}"
         )
 
-        return
+    print(
+        f"  {'TOTAL':22} : "
+        f"{sum(len(x) for x in selection.values())}"
+    )
+
+    documents = (
+        _load_local_documents(
+            selection
+        )
+    )
+
+    _validate_local_hashes(
+        documents
+    )
+
+    print()
+    print(
+        "[LOCAL] All selected papers "
+        "passed loader preflight."
+    )
 
     print(
         f"[LOCAL] Ready for DB: "
@@ -1226,7 +1911,7 @@ def main():
     )
 
     # ========================================================
-    # Connect AWS PostgreSQL
+    # Connect AWS
     # ========================================================
 
     print()
@@ -1235,6 +1920,11 @@ def main():
     )
 
     results = []
+
+    inserted_count = 0
+    updated_count = 0
+    duplicate_count = 0
+    failed_count = 0
 
     try:
 
@@ -1247,7 +1937,7 @@ def main():
             )
 
             # =================================================
-            # Schema Preflight
+            # Schema
             # =================================================
 
             column_info = (
@@ -1264,46 +1954,97 @@ def main():
                 "[DB] core_documents schema OK."
             )
 
+            # =================================================
+            # Before Counts
+            # =================================================
+
             before_count = (
                 _count_core_documents(
                     conn
                 )
             )
 
+            before_arxiv = (
+                _count_source_documents(
+                    conn,
+                    "arxiv",
+                )
+            )
+
+            before_ntrs = (
+                _count_source_documents(
+                    conn,
+                    "ntrs",
+                )
+            )
+
+            print()
             print(
-                f"[DB] Rows before: "
+                f"[DB] Rows before  : "
                 f"{before_count}"
             )
 
-            inserted_count = 0
-            updated_count = 0
-            duplicate_count = 0
-            failed_count = 0
+            print(
+                f"[DB] arXiv before : "
+                f"{before_arxiv}"
+            )
+
+            print(
+                f"[DB] NTRS before  : "
+                f"{before_ntrs}"
+            )
+
+            if (
+                before_count
+                == EXPECTED_FIRST_RUN_ROWS_BEFORE
+            ):
+
+                print(
+                    "[DB] First-run state "
+                    "detected: 30 rows."
+                )
+
+            else:
+
+                print(
+                    "[DB] NOTE: DB is not in "
+                    "the original 30-row state."
+                )
+
+                print(
+                    "[DB] UPSERT safety remains active."
+                )
 
             # =================================================
-            # Insert
+            # UPSERT selected 35 only
             # =================================================
 
-            for index, document in enumerate(
+            for (
+                index,
+                document,
+            ) in enumerate(
                 documents,
                 start=1,
             ):
 
-                source = document[
-                    "source"
-                ]
-
-                source_id = document[
-                    "source_id"
-                ]
-
-                print()
-                print(
-                    "-" * 70
+                source = (
+                    document[
+                        "source"
+                    ]
                 )
 
+                source_id = (
+                    document[
+                        "source_id"
+                    ]
+                )
+
+                print()
+                print("-" * 70)
+
                 print(
-                    f"[{index}/{len(documents)}] "
+                    f"[{index}/"
+                    f"{len(documents)}] "
                     f"{document['topic_axis']}"
                 )
 
@@ -1337,11 +2078,13 @@ def main():
                     )
 
                     # ==========================================
-                    # Exact content duplicate belonging to
-                    # another document
+                    # Same hash owned by ANOTHER document
                     # ==========================================
 
-                    if hash_owner is not None:
+                    if (
+                        hash_owner
+                        is not None
+                    ):
 
                         (
                             owner_id,
@@ -1352,7 +2095,8 @@ def main():
                         same_document = (
                             owner_source
                             == source
-                            and owner_source_id
+                            and
+                            owner_source_id
                             == source_id
                         )
 
@@ -1360,41 +2104,17 @@ def main():
 
                             duplicate_count += 1
 
-                            print(
-                                "[SKIP] Duplicate content hash."
-                            )
-
-                            print(
-                                f"[SKIP] Existing DB id: "
-                                f"{owner_id}"
-                            )
-
-                            print(
-                                f"[SKIP] Existing document: "
+                            raise RuntimeError(
+                                "Duplicate DB content hash.\n"
+                                f"Current: "
+                                f"{source}/"
+                                f"{source_id}\n"
+                                f"Existing DB id: "
+                                f"{owner_id}\n"
+                                f"Existing: "
                                 f"{owner_source}/"
                                 f"{owner_source_id}"
                             )
-
-                            results.append(
-                                {
-                                    "status": (
-                                        "duplicate"
-                                    ),
-                                    "source": source,
-                                    "source_id": (
-                                        source_id
-                                    ),
-                                    "duplicate_of_id": (
-                                        owner_id
-                                    ),
-                                    "duplicate_of": (
-                                        f"{owner_source}/"
-                                        f"{owner_source_id}"
-                                    ),
-                                }
-                            )
-
-                            continue
 
                     # ==========================================
                     # UPSERT
@@ -1429,7 +2149,8 @@ def main():
                     )
 
                     print(
-                        f"[DB] id = {db_id}"
+                        f"[DB] id = "
+                        f"{db_id}"
                     )
 
                     results.append(
@@ -1437,21 +2158,31 @@ def main():
                             "status": (
                                 action.lower()
                             ),
-                            "db_id": db_id,
-                            "source": source,
+
+                            "db_id": (
+                                db_id
+                            ),
+
+                            "source": (
+                                source
+                            ),
+
                             "source_id": (
                                 source_id
                             ),
+
                             "topic_axis": (
                                 document[
                                     "topic_axis"
                                 ]
                             ),
+
                             "title": (
                                 document[
                                     "title"
                                 ]
                             ),
+
                             "content_hash": (
                                 document[
                                     "content_hash"
@@ -1460,32 +2191,14 @@ def main():
                         }
                     )
 
-                except Exception as exc:
+                except Exception:
 
                     failed_count += 1
-
-                    print(
-                        f"[ERROR] "
-                        f"{type(exc).__name__}: "
-                        f"{exc}"
-                    )
-
-                    # 한 문서 SQL 실패 후
-                    # transaction 전체가 aborted 되는 것을 방지
-                    conn.rollback()
-
-                    # 이전 성공분은 아직 commit되지 않았으므로
-                    # 단순 rollback하면 모두 날아간다.
-                    #
-                    # 따라서 오류가 발생하면 안전하게
-                    # 전체 작업을 중단한다.
                     raise
 
             # =================================================
-            # Commit
+            # Verify inside transaction BEFORE commit
             # =================================================
-
-            conn.commit()
 
             after_count = (
                 _count_core_documents(
@@ -1493,8 +2206,104 @@ def main():
                 )
             )
 
+            after_arxiv = (
+                _count_source_documents(
+                    conn,
+                    "arxiv",
+                )
+            )
+
+            after_ntrs = (
+                _count_source_documents(
+                    conn,
+                    "ntrs",
+                )
+            )
+
+            verification = (
+                _verify_selected_documents(
+                    conn,
+                    documents,
+                )
+            )
+
+            if verification[
+                "verified"
+            ] != EXPECTED_TOTAL:
+
+                raise RuntimeError(
+                    "Selected-document DB "
+                    "verification failed.\n"
+                    f"Verified: "
+                    f"{verification['verified']}/"
+                    f"{EXPECTED_TOTAL}\n"
+                    f"Missing: "
+                    f"{verification['missing']}\n"
+                    f"Hash mismatch: "
+                    f"{verification['hash_mismatch']}\n"
+                    f"Axis mismatch: "
+                    f"{verification['axis_mismatch']}"
+                )
+
             # =================================================
-            # Verify
+            # First-run Gate
+            # =================================================
+
+            if (
+                before_count
+                == EXPECTED_FIRST_RUN_ROWS_BEFORE
+                and
+                before_arxiv
+                == EXPECTED_FIRST_RUN_ARXIV_BEFORE
+                and
+                before_ntrs
+                == EXPECTED_FIRST_RUN_NTRS_BEFORE
+            ):
+
+                if (
+                    after_count
+                    != EXPECTED_FIRST_RUN_ROWS_AFTER
+                ):
+
+                    raise RuntimeError(
+                        "Unexpected total DB count.\n"
+                        f"Expected "
+                        f"{EXPECTED_FIRST_RUN_ROWS_AFTER}, "
+                        f"found {after_count}."
+                    )
+
+                if (
+                    after_arxiv
+                    != EXPECTED_FIRST_RUN_ARXIV_AFTER
+                ):
+
+                    raise RuntimeError(
+                        "Unexpected arXiv DB count.\n"
+                        f"Expected "
+                        f"{EXPECTED_FIRST_RUN_ARXIV_AFTER}, "
+                        f"found {after_arxiv}."
+                    )
+
+                if (
+                    after_ntrs
+                    != EXPECTED_FIRST_RUN_NTRS_AFTER
+                ):
+
+                    raise RuntimeError(
+                        "Unexpected NTRS DB count.\n"
+                        f"Expected "
+                        f"{EXPECTED_FIRST_RUN_NTRS_AFTER}, "
+                        f"found {after_ntrs}."
+                    )
+
+            # =================================================
+            # All checks passed -> COMMIT
+            # =================================================
+
+            conn.commit()
+
+            # =================================================
+            # Summary
             # =================================================
 
             _print_database_summary(
@@ -1503,11 +2312,16 @@ def main():
 
             print()
             print("=" * 70)
-            print("DB LOADING COMPLETED")
+
+            print(
+                "ARXIV CORE-100 DB "
+                "LOADING COMPLETED"
+            )
+
             print("=" * 70)
 
             print(
-                f"Local documents : "
+                f"Local selected  : "
                 f"{len(documents)}"
             )
 
@@ -1531,6 +2345,8 @@ def main():
                 f"{failed_count}"
             )
 
+            print()
+
             print(
                 f"Rows before     : "
                 f"{before_count}"
@@ -1541,31 +2357,100 @@ def main():
                 f"{after_count}"
             )
 
+            print(
+                f"arXiv before    : "
+                f"{before_arxiv}"
+            )
+
+            print(
+                f"arXiv after     : "
+                f"{after_arxiv}"
+            )
+
+            print(
+                f"NTRS before     : "
+                f"{before_ntrs}"
+            )
+
+            print(
+                f"NTRS after      : "
+                f"{after_ntrs}"
+            )
+
+            print()
+
+            print(
+                f"Verified        : "
+                f"{verification['verified']} / "
+                f"{EXPECTED_TOTAL}"
+            )
+
+            # =================================================
+            # Report
+            # =================================================
+
             report_payload = {
-                "local_documents": (
-                    len(
-                        documents
+                "loader_version": (
+                    LOADER_VERSION
+                ),
+
+                "selection_file": (
+                    str(
+                        SELECTION_FILE
                     )
                 ),
+
+                "local_selected": (
+                    len(documents)
+                ),
+
                 "inserted": (
                     inserted_count
                 ),
+
                 "updated": (
                     updated_count
                 ),
+
                 "duplicates": (
                     duplicate_count
                 ),
+
                 "failed": (
                     failed_count
                 ),
+
                 "rows_before": (
                     before_count
                 ),
+
                 "rows_after": (
                     after_count
                 ),
-                "documents": results,
+
+                "arxiv_before": (
+                    before_arxiv
+                ),
+
+                "arxiv_after": (
+                    after_arxiv
+                ),
+
+                "ntrs_before": (
+                    before_ntrs
+                ),
+
+                "ntrs_after": (
+                    after_ntrs
+                ),
+
+                "verification": (
+                    verification
+                ),
+
+                "documents": (
+                    results
+                ),
             }
 
             _save_json(
@@ -1580,12 +2465,88 @@ def main():
 
             print("=" * 70)
 
+            if (
+                before_count
+                == 30
+                and
+                inserted_count
+                == 35
+                and
+                updated_count
+                == 0
+                and
+                after_count
+                == 65
+                and
+                after_arxiv
+                == 50
+                and
+                after_ntrs
+                == 15
+                and
+                verification[
+                    "verified"
+                ]
+                == 35
+            ):
+
+                print(
+                    "[PASS] Core-100 arXiv "
+                    "addition completed."
+                )
+
+                print()
+
+                print(
+                    "AWS RDS:"
+                )
+
+                print(
+                    "  arXiv : 50"
+                )
+
+                print(
+                    "  NTRS  : 15"
+                )
+
+                print(
+                    "  TOTAL : 65"
+                )
+
+                print()
+
+                print(
+                    "NEXT:"
+                )
+
+                print(
+                    "Start NTRS Core-100 "
+                    "expansion +35."
+                )
+
+            else:
+
+                print(
+                    "[PASS] Selected 35 arXiv "
+                    "papers are present and "
+                    "verified in DB."
+                )
+
+                print(
+                    "This appears to be a rerun "
+                    "or DB state differs from "
+                    "the original 30-row state."
+                )
+
+            print("=" * 70)
+
     except Exception as exc:
 
         print()
         print("=" * 70)
 
         print(
+            "ARXIV CORE-100 "
             "DB LOADING FAILED"
         )
 
@@ -1597,9 +2558,14 @@ def main():
         )
 
         print()
+
         print(
-            "AWS RDS에 부분 데이터가 들어가는 것을 "
-            "막기 위해 transaction을 취소했습니다."
+            "Transaction was not committed."
+        )
+
+        print(
+            "The selected 35 documents "
+            "were not partially loaded."
         )
 
         print("=" * 70)
