@@ -1,0 +1,9 @@
+psycopg[binary]
+pgvector
+pydantic-settings
+python-dotenv
+httpx
+tenacity
+pymupdf
+pytest
+ruff

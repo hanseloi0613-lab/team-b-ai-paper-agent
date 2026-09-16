@@ -1,0 +1,21 @@
+services:
+  database-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: team-b-database-worker
+
+    env_file:
+      - .env
+
+    volumes:
+      - ./data:/app/data
+
+    command:
+      - uv
+      - run
+      - python
+      - main.py
+
+    restart: "no"
