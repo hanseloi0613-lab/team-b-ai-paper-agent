@@ -5,15 +5,74 @@ from pathlib import Path
 from urllib.parse import urljoin
 
 import httpx
+import psycopg
 
 from app.config import PROJECT_ROOT, settings
+
+
+# ============================================================
+# TEAM B - NASA NTRS Core-100 Candidate Collector
+# ============================================================
+#
+# 현재 AWS RDS:
+#
+#   arXiv : 50
+#   NTRS  : 15
+#   TOTAL : 65
+#
+# 이번 NTRS 추가 목표:
+#
+#   rover_autonomy       +12
+#   onboard_ai           +12
+#   satellite_autonomy   +11
+#   ------------------------
+#   TOTAL                +35
+#
+# 최종:
+#
+#   arXiv : 50
+#   NTRS  : 50
+#   TOTAL : 100
+#
+#
+# 이 Collector가 하는 것:
+#
+#   NASA NTRS metadata 검색
+#           ↓
+#   PUBLIC + Full Document 필터
+#           ↓
+#   기술/학술 document type 필터
+#           ↓
+#   query 간 source_id dedup
+#           ↓
+#   AWS에 이미 있는 NTRS 15편 제외
+#           ↓
+#   Human QA용 review pool 생성
+#
+#
+# 이 Collector가 하지 않는 것:
+#
+#   - 최종 35편 자동선정
+#   - TXT/PDF 다운로드
+#   - Resolver
+#   - Parser
+#   - Cleaner
+#   - DB INSERT
+#
+# 최종 선정은 Human QA로 한다.
+# ============================================================
+
+
+COLLECTOR_VERSION = "core100_v1"
 
 
 # ============================================================
 # NASA NTRS API
 # ============================================================
 
-NTRS_API_ROOT = "https://ntrs.nasa.gov/api"
+NTRS_API_ROOT = (
+    "https://ntrs.nasa.gov/api"
+)
 
 NTRS_SEARCH_URL = (
     f"{NTRS_API_ROOT}/citations/search"
@@ -25,54 +84,110 @@ NTRS_PUBLIC_ROOT = (
 
 
 # ============================================================
-# Cache Version
-# ============================================================
-#
-# v1:
-#   POST + params 방식으로 검색 조건이 제대로
-#   적용되지 않은 cache가 생성됨.
-#
-# v2:
-#   NASA 공식 OpenAPI 방식대로 JSON body 사용.
-#
-# 따라서 기존 잘못된 cache를 자동으로 무시한다.
+# Database
 # ============================================================
 
-CACHE_VERSION = "v2"
+TABLE_SCHEMA = "public"
+
+TABLE_NAME = "core_documents"
+
+
+EXPECTED_EXISTING_NTRS_TOTAL = 15
+
+
+EXPECTED_EXISTING_NTRS_BY_AXIS = {
+
+    "rover_autonomy": 5,
+
+    "onboard_ai": 5,
+
+    "satellite_autonomy": 5,
+}
 
 
 # ============================================================
-# Pilot Settings
+# Core-100 Targets
 # ============================================================
 
-RESULTS_PER_QUERY = 20
+TARGET_NEW_COUNTS = {
+
+    "rover_autonomy": 12,
+
+    "onboard_ai": 12,
+
+    "satellite_autonomy": 11,
+}
+
+
+TARGET_NEW_TOTAL = sum(
+    TARGET_NEW_COUNTS.values()
+)
+
+
+# 최종 선정보다 넓은 Human QA pool
+REVIEW_POOL_MULTIPLIER = 4
+
+
+# Query 하나당 최대 후보
+RESULTS_PER_QUERY = 50
+
+
+# 콘솔에는 너무 많이 출력하지 않음
+CONSOLE_PREVIEW_LIMIT = 25
+
+
+# ============================================================
+# Paths
+# ============================================================
+
+CACHE_ROOT = (
+    PROJECT_ROOT
+    / "data"
+    / "cache"
+    / "ntrs"
+    / COLLECTOR_VERSION
+)
+
+
+REPORT_DIR = (
+    PROJECT_ROOT
+    / "data"
+    / "reports"
+)
+
+
+REPORT_FILE = (
+    REPORT_DIR
+    / "ntrs_core100_collection_report.json"
+)
 
 
 # ============================================================
 # Search Queries
 # ============================================================
 #
-# NASA NTRS 검색 문법:
+# 기존 파일럿 query보다 넓힌다.
 #
-# space = AND
-# |     = OR
-# "..." = exact phrase
+# 하지만 최종 자동선정은 하지 않는다.
 #
-# 목적:
-# 각 axis마다 최종 5편을 사람이 선정할 수 있는
-# 후보 pool 확보.
+# Broad Candidate Collection
+#       ↓
+# Human QA
+#
 # ============================================================
 
 NTRS_QUERIES = {
 
     # ========================================================
-    # 1. Rover Autonomy
+    # 1. Planetary Rover Autonomy
     # ========================================================
 
     "rover_autonomy": [
 
         {
-            "name": "planetary_rover_navigation",
+            "name": (
+                "planetary_rover_navigation"
+            ),
             "query": (
                 '"planetary rover" '
                 '"autonomous navigation"'
@@ -80,23 +195,29 @@ NTRS_QUERIES = {
         },
 
         {
-            "name": "mars_rover_navigation",
+            "name": (
+                "mars_rover_navigation"
+            ),
             "query": (
                 '"Mars rover" '
-                '"autonomous navigation"'
+                'autonomous navigation'
             ),
         },
 
         {
-            "name": "lunar_rover_navigation",
+            "name": (
+                "lunar_rover_navigation"
+            ),
             "query": (
                 '"lunar rover" '
-                '"autonomous navigation"'
+                'autonomous navigation'
             ),
         },
 
         {
-            "name": "planetary_path_planning",
+            "name": (
+                "planetary_path_planning"
+            ),
             "query": (
                 '"planetary rover" '
                 '"path planning"'
@@ -104,22 +225,91 @@ NTRS_QUERIES = {
         },
 
         {
-            "name": "rover_hazard_avoidance",
+            "name": (
+                "rover_hazard_avoidance"
+            ),
             "query": (
                 'rover '
                 '"hazard avoidance"'
             ),
         },
+
+        {
+            "name": (
+                "rover_obstacle_avoidance"
+            ),
+            "query": (
+                'rover '
+                '"obstacle avoidance"'
+            ),
+        },
+
+        {
+            "name": (
+                "rover_traversability"
+            ),
+            "query": (
+                'rover traversability'
+            ),
+        },
+
+        {
+            "name": (
+                "rover_localization_navigation"
+            ),
+            "query": (
+                'rover localization navigation'
+            ),
+        },
+
+        {
+            "name": (
+                "planetary_rover_autonomy"
+            ),
+            "query": (
+                '"planetary rover" autonomy'
+            ),
+        },
+
+        {
+            "name": (
+                "mars_rover_localization"
+            ),
+            "query": (
+                '"Mars rover" localization'
+            ),
+        },
+
+        {
+            "name": (
+                "lunar_rover_navigation_broad"
+            ),
+            "query": (
+                '"lunar rover" navigation'
+            ),
+        },
+
+        {
+            "name": (
+                "rover_autonomous_science"
+            ),
+            "query": (
+                'rover '
+                '"autonomous science"'
+            ),
+        },
     ],
 
     # ========================================================
-    # 2. Onboard AI
+    # 2. Onboard AI / Deep-Space Autonomy
     # ========================================================
 
     "onboard_ai": [
 
         {
-            "name": "onboard_autonomy",
+            "name": (
+                "onboard_autonomy"
+            ),
             "query": (
                 'spacecraft '
                 '"onboard autonomy"'
@@ -127,47 +317,126 @@ NTRS_QUERIES = {
         },
 
         {
-            "name": "autonomous_spacecraft",
+            "name": (
+                "autonomous_spacecraft"
+            ),
             "query": (
                 '"autonomous spacecraft"'
             ),
         },
 
         {
-            "name": "deep_space_autonomy",
+            "name": (
+                "deep_space_autonomy"
+            ),
             "query": (
                 '"deep space" '
+                'spacecraft autonomy'
+            ),
+        },
+
+        {
+            "name": (
+                "onboard_ai"
+            ),
+            "query": (
                 'spacecraft '
+                '"onboard AI"'
+            ),
+        },
+
+        {
+            "name": (
+                "spacecraft_ai_autonomy"
+            ),
+            "query": (
+                'spacecraft '
+                '"artificial intelligence" '
                 'autonomy'
             ),
         },
 
         {
-            "name": "onboard_ai",
-            "query": (
-                'spacecraft '
-                '("onboard AI"|'
-                '"onboard artificial intelligence")'
+            "name": (
+                "autonomous_decision"
             ),
-        },
-
-        {
-            "name": "autonomous_decision",
             "query": (
                 'spacecraft '
                 '"autonomous decision"'
             ),
         },
+
+        {
+            "name": (
+                "autonomous_navigation"
+            ),
+            "query": (
+                'spacecraft '
+                'autonomous navigation'
+            ),
+        },
+
+        {
+            "name": (
+                "deep_space_navigation"
+            ),
+            "query": (
+                '"deep space" '
+                'autonomous navigation'
+            ),
+        },
+
+        {
+            "name": (
+                "autonomous_planning"
+            ),
+            "query": (
+                'spacecraft '
+                'autonomous planning'
+            ),
+        },
+
+        {
+            "name": (
+                "mission_autonomy"
+            ),
+            "query": (
+                'spacecraft '
+                '"mission autonomy"'
+            ),
+        },
+
+        {
+            "name": (
+                "onboard_planning"
+            ),
+            "query": (
+                'spacecraft '
+                '"onboard planning"'
+            ),
+        },
+
+        {
+            "name": (
+                "autonomous_control"
+            ),
+            "query": (
+                'spacecraft '
+                '"autonomous control"'
+            ),
+        },
     ],
 
     # ========================================================
-    # 3. Satellite / Spacecraft Autonomy
+    # 3. Satellite / Spacecraft Autonomous Operations
     # ========================================================
 
     "satellite_autonomy": [
 
         {
-            "name": "satellite_fault_detection",
+            "name": (
+                "satellite_fault_detection"
+            ),
             "query": (
                 'satellite '
                 '"fault detection"'
@@ -175,7 +444,9 @@ NTRS_QUERIES = {
         },
 
         {
-            "name": "spacecraft_fault_detection",
+            "name": (
+                "spacecraft_fault_detection"
+            ),
             "query": (
                 'spacecraft '
                 '"fault detection"'
@@ -183,7 +454,9 @@ NTRS_QUERIES = {
         },
 
         {
-            "name": "fault_diagnosis",
+            "name": (
+                "fault_diagnosis"
+            ),
             "query": (
                 'spacecraft '
                 '"fault diagnosis"'
@@ -191,7 +464,9 @@ NTRS_QUERIES = {
         },
 
         {
-            "name": "fault_recovery",
+            "name": (
+                "fault_recovery"
+            ),
             "query": (
                 'spacecraft '
                 '"fault recovery"'
@@ -199,7 +474,9 @@ NTRS_QUERIES = {
         },
 
         {
-            "name": "fault_management",
+            "name": (
+                "fault_management"
+            ),
             "query": (
                 'spacecraft '
                 '"fault management"'
@@ -207,10 +484,71 @@ NTRS_QUERIES = {
         },
 
         {
-            "name": "autonomous_operations",
+            "name": (
+                "autonomous_operations"
+            ),
             "query": (
                 'spacecraft '
                 '"autonomous operations"'
+            ),
+        },
+
+        {
+            "name": (
+                "satellite_anomaly_detection"
+            ),
+            "query": (
+                'satellite '
+                '"anomaly detection"'
+            ),
+        },
+
+        {
+            "name": (
+                "spacecraft_anomaly_detection"
+            ),
+            "query": (
+                'spacecraft '
+                '"anomaly detection"'
+            ),
+        },
+
+        {
+            "name": (
+                "fault_isolation"
+            ),
+            "query": (
+                'spacecraft '
+                '"fault isolation"'
+            ),
+        },
+
+        {
+            "name": (
+                "health_management"
+            ),
+            "query": (
+                'spacecraft '
+                '"health management"'
+            ),
+        },
+
+        {
+            "name": (
+                "satellite_autonomous_operations"
+            ),
+            "query": (
+                'satellite '
+                '"autonomous operations"'
+            ),
+        },
+
+        {
+            "name": (
+                "spacecraft_fdir"
+            ),
+            "query": (
+                'spacecraft FDIR'
             ),
         },
     ],
@@ -221,10 +559,9 @@ NTRS_QUERIES = {
 # Allowed STI Types
 # ============================================================
 #
-# NASA 공식 STI Type domain values 중
-# 논문/기술보고서 계열만 유지.
+# 발표자료, poster, abstract-only 등은
+# Core paper corpus에서 제외한다.
 #
-# Presentation / Poster / Video / Other는 제외.
 # ============================================================
 
 ALLOWED_STI_TYPES = {
@@ -262,29 +599,161 @@ ALLOWED_STI_TYPES = {
 
 
 # ============================================================
-# Paths
+# Human Review Signals
+# ============================================================
+#
+# 자동 합격/탈락용이 아니다.
+#
+# Human QA에서 관련 후보를 위로 올리기 위한
+# 단순 lexical signal이다.
+#
 # ============================================================
 
-CACHE_ROOT = (
-    PROJECT_ROOT
-    / "data"
-    / "cache"
-    / "ntrs"
-    / CACHE_VERSION
-)
+AXIS_KEYWORDS = {
+
+    "rover_autonomy": [
+
+        "rover",
+
+        "planetary",
+
+        "lunar",
+
+        "mars",
+
+        "navigation",
+
+        "path planning",
+
+        "localization",
+
+        "traversability",
+
+        "terrain",
+
+        "hazard avoidance",
+
+        "obstacle avoidance",
+
+        "mobility",
+
+        "autonomy",
+
+        "autonomous science",
+    ],
+
+    "onboard_ai": [
+
+        "spacecraft",
+
+        "deep space",
+
+        "onboard",
+
+        "on-board",
+
+        "autonomy",
+
+        "autonomous",
+
+        "artificial intelligence",
+
+        "machine learning",
+
+        "decision",
+
+        "planning",
+
+        "navigation",
+
+        "guidance",
+
+        "mission autonomy",
+    ],
+
+    "satellite_autonomy": [
+
+        "spacecraft",
+
+        "satellite",
+
+        "fault",
+
+        "anomaly",
+
+        "diagnosis",
+
+        "detection",
+
+        "isolation",
+
+        "recovery",
+
+        "fdir",
+
+        "health management",
+
+        "fault management",
+
+        "monitoring",
+
+        "autonomous operations",
+
+        "autonomy",
+    ],
+}
 
 
 # ============================================================
-# HTTP Headers
+# HTTP
 # ============================================================
 
 HEADERS = {
+
     "User-Agent": (
         "TEAM-B-University-Research-Project/1.0"
     ),
-    "Accept": "application/json",
-    "Content-Type": "application/json",
+
+    "Accept": (
+        "application/json"
+    ),
 }
+
+
+# ============================================================
+# JSON Helpers
+# ============================================================
+
+def _load_json(
+    path: Path,
+) -> dict:
+
+    return json.loads(
+        path.read_text(
+            encoding="utf-8",
+        )
+    )
+
+
+def _save_json(
+    path: Path,
+    payload: dict,
+) -> None:
+
+    path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    path.write_text(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            indent=2,
+            default=str,
+        ),
+        encoding="utf-8",
+    )
 
 
 # ============================================================
@@ -292,19 +761,44 @@ HEADERS = {
 # ============================================================
 
 def _normalize_space(
-    value,
+    value: str | None,
 ) -> str:
 
-    if value is None:
+    if not value:
+
         return ""
 
     return " ".join(
-        str(value).split()
+        str(
+            value
+        ).split()
     )
 
 
+def _safe_float(
+    value,
+) -> float | None:
+
+    try:
+
+        if value is None:
+
+            return None
+
+        return float(
+            value
+        )
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+
+        return None
+
+
 # ============================================================
-# URL Helper
+# URL Helpers
 # ============================================================
 
 def _absolute_ntrs_url(
@@ -312,6 +806,7 @@ def _absolute_ntrs_url(
 ) -> str | None:
 
     if not value:
+
         return None
 
     return urljoin(
@@ -321,7 +816,136 @@ def _absolute_ntrs_url(
 
 
 # ============================================================
-# Cache Helpers
+# Existing NTRS Documents in AWS
+# ============================================================
+
+def _load_existing_ntrs_from_db() -> dict[
+    str,
+    str,
+]:
+
+    sql = f"""
+    SELECT
+        source_id,
+        topic_axis
+    FROM {TABLE_SCHEMA}.{TABLE_NAME}
+    WHERE source = 'ntrs'
+    ORDER BY topic_axis, source_id
+    """
+
+    print()
+    print(
+        "[DB] Loading existing NTRS IDs "
+        "from AWS RDS..."
+    )
+
+    with psycopg.connect(
+        settings.dsn
+    ) as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                sql
+            )
+
+            rows = (
+                cur.fetchall()
+            )
+
+    existing = {
+
+        str(
+            source_id
+        ): str(
+            topic_axis
+        )
+
+        for (
+            source_id,
+            topic_axis,
+        )
+        in rows
+    }
+
+    print(
+        f"[DB] Existing NTRS documents: "
+        f"{len(existing)}"
+    )
+
+    axis_counts = {
+
+        axis: 0
+
+        for axis
+        in EXPECTED_EXISTING_NTRS_BY_AXIS
+    }
+
+    for topic_axis in existing.values():
+
+        if topic_axis in axis_counts:
+
+            axis_counts[
+                topic_axis
+            ] += 1
+
+    for (
+        topic_axis,
+        count,
+    ) in axis_counts.items():
+
+        print(
+            f"[DB]   "
+            f"{topic_axis:22} : "
+            f"{count}"
+        )
+
+    # ========================================================
+    # Core-100 시작 상태 검증
+    # ========================================================
+
+    if (
+        len(existing)
+        != EXPECTED_EXISTING_NTRS_TOTAL
+    ):
+
+        raise RuntimeError(
+            "Unexpected current NTRS DB state.\n"
+            f"Expected "
+            f"{EXPECTED_EXISTING_NTRS_TOTAL} "
+            f"existing NTRS documents, "
+            f"found {len(existing)}."
+        )
+
+    for (
+        topic_axis,
+        expected_count,
+    ) in EXPECTED_EXISTING_NTRS_BY_AXIS.items():
+
+        actual_count = (
+            axis_counts.get(
+                topic_axis,
+                0,
+            )
+        )
+
+        if (
+            actual_count
+            != expected_count
+        ):
+
+            raise RuntimeError(
+                "Unexpected NTRS axis count.\n"
+                f"{topic_axis}: "
+                f"expected {expected_count}, "
+                f"found {actual_count}."
+            )
+
+    return existing
+
+
+# ============================================================
+# Query Cache
 # ============================================================
 
 def _query_hash(
@@ -361,38 +985,44 @@ def _cache_path(
 
 
 def _load_query_cache(
+    *,
     topic_axis: str,
     query_name: str,
     query: str,
     max_results: int,
 ) -> list[dict] | None:
 
-    path = _cache_path(
-        topic_axis,
-        query_name,
-        query,
+    path = (
+        _cache_path(
+            topic_axis,
+            query_name,
+            query,
+        )
     )
 
     if not path.exists():
+
         return None
 
     try:
 
-        payload = json.loads(
-            path.read_text(
-                encoding="utf-8"
+        payload = (
+            _load_json(
+                path
             )
         )
 
     except Exception:
+
         return None
 
     if (
         payload.get(
-            "cache_version"
+            "collector_version"
         )
-        != CACHE_VERSION
+        != COLLECTOR_VERSION
     ):
+
         return None
 
     if (
@@ -401,6 +1031,7 @@ def _load_query_cache(
         )
         != query
     ):
+
         return None
 
     if (
@@ -409,47 +1040,58 @@ def _load_query_cache(
         )
         != max_results
     ):
+
         return None
 
-    documents = payload.get(
-        "documents"
+    documents = (
+        payload.get(
+            "documents"
+        )
     )
 
     if not isinstance(
         documents,
         list,
     ):
+
         return None
 
     print(
-        f"[CACHE] Loaded: {path}"
+        f"[CACHE] Loaded: "
+        f"{path}"
     )
 
     return documents
 
 
 def _save_query_cache(
+    *,
     topic_axis: str,
     query_name: str,
     query: str,
     max_results: int,
     documents: list[dict],
     api_total: int | None,
-    returned_count: int,
+    rejected_reasons: dict[str, int],
 ) -> None:
 
-    path = _cache_path(
-        topic_axis,
-        query_name,
-        query,
+    path = (
+        _cache_path(
+            topic_axis,
+            query_name,
+            query,
+        )
     )
 
     payload = {
-        "cache_version": (
-            CACHE_VERSION
+
+        "collector_version": (
+            COLLECTOR_VERSION
         ),
 
-        "source": "ntrs",
+        "source": (
+            "ntrs"
+        ),
 
         "topic_axis": (
             topic_axis
@@ -459,7 +1101,9 @@ def _save_query_cache(
             query_name
         ),
 
-        "query": query,
+        "query": (
+            query
+        ),
 
         "max_results": (
             max_results
@@ -469,8 +1113,8 @@ def _save_query_cache(
             api_total
         ),
 
-        "returned_count": (
-            returned_count
+        "rejected_reasons": (
+            rejected_reasons
         ),
 
         "documents": (
@@ -478,101 +1122,67 @@ def _save_query_cache(
         ),
     }
 
-    path.write_text(
-        json.dumps(
-            payload,
-            ensure_ascii=False,
-            indent=2,
-            default=str,
-        ),
-        encoding="utf-8",
+    _save_json(
+        path,
+        payload,
     )
 
     print(
-        f"[CACHE] Saved: {path}"
+        f"[CACHE] Saved: "
+        f"{path}"
     )
 
 
 # ============================================================
-# NASA NTRS HTTP Search
+# NASA NTRS HTTP
 # ============================================================
 
-def _build_search_body(
+def _request_ntrs_search(
+    *,
     query: str,
     max_results: int,
 ) -> dict:
-    """
-    NASA OpenAPI POST /citations/search용
-    JSON request body.
 
-    핵심 수정:
-    이전 params= 방식이 아니라
-    JSON body 자체에 검색조건을 넣는다.
-    """
+    params = {
 
-    return {
-        "q": query,
+        "q": (
+            query
+        ),
 
         "disseminated": (
             "DOCUMENT_AND_METADATA"
         ),
 
-        "page": {
-            "size": min(
-                max_results,
-                100,
-            ),
-
-            "from": 0,
-        },
+        "page.size": min(
+            max_results,
+            100,
+        ),
     }
 
+    # ========================================================
+    # GET search
+    #
+    # q가 URL query parameter로 확실하게 전달되도록 한다.
+    # ========================================================
 
-def _do_post(
-    body: dict,
-) -> httpx.Response:
-
-    return httpx.post(
-        NTRS_SEARCH_URL,
-        json=body,
-        timeout=settings.request_timeout,
-        follow_redirects=True,
-        headers=HEADERS,
-    )
-
-
-def _request_ntrs_search(
-    query: str,
-    max_results: int,
-) -> dict:
-    """
-    NASA NTRS 검색.
-
-    POST + JSON body.
-
-    429가 발생하고 Retry-After가 있을 경우
-    한 번만 재시도한다.
-    """
-
-    body = _build_search_body(
-        query=query,
-        max_results=max_results,
-    )
-
-    response = _do_post(
-        body
+    response = (
+        httpx.get(
+            NTRS_SEARCH_URL,
+            params=params,
+            timeout=settings.request_timeout,
+            follow_redirects=True,
+            headers=HEADERS,
+        )
     )
 
     # ========================================================
     # Rate Limit
     # ========================================================
 
-    if response.status_code == 429:
-
-        print()
-        print(
-            "[NTRS] HTTP 429 rate limit detected."
-        )
+    if (
+        response.status_code
+        == 429
+    ):
 
         retry_after = (
             response.headers.get(
@@ -580,73 +1190,47 @@ def _request_ntrs_search(
             )
         )
 
-        if not (
+        if (
             retry_after
             and retry_after.isdigit()
         ):
 
-            raise RuntimeError(
-                "NASA NTRS returned HTTP 429 "
-                "without Retry-After."
+            wait_seconds = int(
+                retry_after
             )
 
-        wait_seconds = int(
-            retry_after
-        )
+        else:
+
+            wait_seconds = max(
+                settings.request_delay,
+                30,
+            )
 
         print(
-            f"[NTRS] Waiting "
-            f"{wait_seconds} seconds..."
+            f"[NTRS] HTTP 429. "
+            f"Waiting "
+            f"{wait_seconds} sec..."
         )
 
         time.sleep(
             wait_seconds
         )
 
-        response = _do_post(
-            body
-        )
-
-        if response.status_code == 429:
-
-            raise RuntimeError(
-                "NASA NTRS rate limit "
-                "is still active."
+        response = (
+            httpx.get(
+                NTRS_SEARCH_URL,
+                params=params,
+                timeout=settings.request_timeout,
+                follow_redirects=True,
+                headers=HEADERS,
             )
-
-    # ========================================================
-    # Other HTTP Errors
-    # ========================================================
-
-    if not response.is_success:
-
-        preview = (
-            response.text[:1000]
-            if response.text
-            else ""
         )
 
-        raise RuntimeError(
-            f"NTRS HTTP "
-            f"{response.status_code}\n"
-            f"Response: {preview}"
-        )
+    response.raise_for_status()
 
-    # ========================================================
-    # JSON
-    # ========================================================
-
-    try:
-
-        payload = (
-            response.json()
-        )
-
-    except Exception as exc:
-
-        raise RuntimeError(
-            "NASA NTRS response was not JSON."
-        ) from exc
+    payload = (
+        response.json()
+    )
 
     if not isinstance(
         payload,
@@ -654,8 +1238,7 @@ def _request_ntrs_search(
     ):
 
         raise RuntimeError(
-            "Unexpected NASA NTRS "
-            "response structure."
+            "Unexpected NASA NTRS response."
         )
 
     return payload
@@ -671,15 +1254,18 @@ def _extract_authors(
 
     authors: list[str] = []
 
-    affiliations = item.get(
-        "authorAffiliations",
-        [],
+    affiliations = (
+        item.get(
+            "authorAffiliations",
+            [],
+        )
     )
 
     if not isinstance(
         affiliations,
         list,
     ):
+
         return authors
 
     for affiliation in affiliations:
@@ -688,33 +1274,42 @@ def _extract_authors(
             affiliation,
             dict,
         ):
+
             continue
 
-        meta = affiliation.get(
-            "meta",
-            {},
+        meta = (
+            affiliation.get(
+                "meta",
+                {},
+            )
         )
 
         if not isinstance(
             meta,
             dict,
         ):
+
             continue
 
-        author = meta.get(
-            "author",
-            {},
+        author = (
+            meta.get(
+                "author",
+                {},
+            )
         )
 
         if not isinstance(
             author,
             dict,
         ):
+
             continue
 
-        name = _normalize_space(
-            author.get(
-                "name"
+        name = (
+            _normalize_space(
+                author.get(
+                    "name"
+                )
             )
         )
 
@@ -734,9 +1329,11 @@ def _extract_doi(
     item: dict,
 ) -> str | None:
 
-    identifiers = item.get(
-        "sourceIdentifiers",
-        [],
+    identifiers = (
+        item.get(
+            "sourceIdentifiers",
+            [],
+        )
     )
 
     if isinstance(
@@ -750,35 +1347,41 @@ def _extract_doi(
                 identifier,
                 dict,
             ):
+
                 continue
 
-            identifier_type = str(
+            id_type = str(
                 identifier.get(
                     "type",
                     "",
                 )
             ).upper()
 
-            if identifier_type != "DOI":
-                continue
+            if (
+                id_type
+                == "DOI"
+            ):
 
-            value = (
-                identifier.get(
-                    "number"
-                )
-                or identifier.get(
-                    "value"
-                )
-            )
-
-            if value:
-                return str(
-                    value
+                value = (
+                    identifier.get(
+                        "number"
+                    )
+                    or identifier.get(
+                        "value"
+                    )
                 )
 
-    publications = item.get(
-        "publications",
-        [],
+                if value:
+
+                    return str(
+                        value
+                    )
+
+    publications = (
+        item.get(
+            "publications",
+            [],
+        )
     )
 
     if isinstance(
@@ -792,13 +1395,17 @@ def _extract_doi(
                 publication,
                 dict,
             ):
+
                 continue
 
-            doi = publication.get(
-                "doi"
+            doi = (
+                publication.get(
+                    "doi"
+                )
             )
 
             if doi:
+
                 return str(
                     doi
                 )
@@ -810,9 +1417,11 @@ def _extract_published_date(
     item: dict,
 ) -> str | None:
 
-    publications = item.get(
-        "publications",
-        [],
+    publications = (
+        item.get(
+            "publications",
+            [],
+        )
     )
 
     if isinstance(
@@ -826,10 +1435,13 @@ def _extract_published_date(
                 publication,
                 dict,
             ):
+
                 continue
 
-            value = publication.get(
-                "publicationDate"
+            value = (
+                publication.get(
+                    "publicationDate"
+                )
             )
 
             if value:
@@ -844,8 +1456,10 @@ def _extract_published_date(
         "created",
     ):
 
-        value = item.get(
-            key
+        value = (
+            item.get(
+                key
+            )
         )
 
         if value:
@@ -858,36 +1472,37 @@ def _extract_published_date(
 
 
 # ============================================================
-# Download Metadata
+# Download URLs
 # ============================================================
 
 def _extract_download_urls(
     item: dict,
 ) -> dict:
-    """
-    검색 응답 안에 downloads 정보가 있으면
-    후보 URL을 미리 저장한다.
-
-    실제 사용 가능 여부는 다음 resolver에서
-    다시 확인한다.
-    """
 
     fulltext_url = None
+
     pdf_url = None
+
     original_url = None
 
-    downloads = item.get(
-        "downloads",
-        [],
+
+    downloads = (
+        item.get(
+            "downloads",
+            [],
+        )
     )
 
     if not isinstance(
         downloads,
         list,
     ):
+
         downloads = []
 
-    summary = []
+
+    download_summary = []
+
 
     for download in downloads:
 
@@ -895,17 +1510,21 @@ def _extract_download_urls(
             download,
             dict,
         ):
+
             continue
 
-        links = download.get(
-            "links",
-            {},
+        links = (
+            download.get(
+                "links",
+                {},
+            )
         )
 
         if not isinstance(
             links,
             dict,
         ):
+
             links = {}
 
         current_fulltext = (
@@ -959,8 +1578,9 @@ def _extract_download_urls(
                 current_original
             )
 
-        summary.append(
+        download_summary.append(
             {
+
                 "name": (
                     download.get(
                         "name"
@@ -1000,6 +1620,7 @@ def _extract_download_urls(
         )
 
     return {
+
         "fulltext_url": (
             fulltext_url
         ),
@@ -1013,7 +1634,7 @@ def _extract_download_urls(
         ),
 
         "downloads": (
-            summary
+            download_summary
         ),
     }
 
@@ -1024,21 +1645,27 @@ def _extract_download_urls(
 
 def _candidate_is_usable(
     item: dict,
-) -> tuple[bool, str]:
-    """
-    collector 단계에서는 너무 공격적으로
-    full-text 여부를 필터링하지 않는다.
+) -> tuple[
+    bool,
+    str,
+]:
 
-    필수 조건:
-      - PUBLIC
-      - DOCUMENT_AND_METADATA
-      - 학술/기술 STI type
-      - title 존재
+    source_id = (
+        item.get(
+            "id"
+        )
+    )
 
-    downloadsAvailable / onlyAbstract는
-    후보 metadata로만 기록하고,
-    실제 full text 여부는 resolver에서 확인한다.
-    """
+    if source_id is None:
+
+        return (
+            False,
+            "no_source_id",
+        )
+
+    # ========================================================
+    # Public
+    # ========================================================
 
     distribution = str(
         item.get(
@@ -1047,12 +1674,19 @@ def _candidate_is_usable(
         )
     ).upper()
 
-    if distribution != "PUBLIC":
+    if (
+        distribution
+        != "PUBLIC"
+    ):
 
         return (
             False,
             "not_public",
         )
+
+    # ========================================================
+    # Full document
+    # ========================================================
 
     disseminated = str(
         item.get(
@@ -1071,6 +1705,38 @@ def _candidate_is_usable(
             "metadata_only",
         )
 
+    # ========================================================
+    # Download
+    # ========================================================
+
+    if not item.get(
+        "downloadsAvailable",
+        False,
+    ):
+
+        return (
+            False,
+            "no_download",
+        )
+
+    # ========================================================
+    # Abstract only
+    # ========================================================
+
+    if item.get(
+        "onlyAbstract",
+        False,
+    ):
+
+        return (
+            False,
+            "abstract_only",
+        )
+
+    # ========================================================
+    # Document type
+    # ========================================================
+
     sti_type = str(
         item.get(
             "stiType",
@@ -1088,9 +1754,15 @@ def _candidate_is_usable(
             f"sti_type:{sti_type}",
         )
 
-    title = _normalize_space(
-        item.get(
-            "title"
+    # ========================================================
+    # Title
+    # ========================================================
+
+    title = (
+        _normalize_space(
+            item.get(
+                "title"
+            )
         )
     )
 
@@ -1099,6 +1771,25 @@ def _candidate_is_usable(
         return (
             False,
             "no_title",
+        )
+
+    # ========================================================
+    # Abstract
+    # ========================================================
+
+    abstract = (
+        _normalize_space(
+            item.get(
+                "abstract"
+            )
+        )
+    )
+
+    if not abstract:
+
+        return (
+            False,
+            "no_abstract",
         )
 
     return (
@@ -1112,6 +1803,7 @@ def _candidate_is_usable(
 # ============================================================
 
 def _parse_candidate(
+    *,
     item: dict,
     topic_axis: str,
     query_name: str,
@@ -1121,7 +1813,8 @@ def _parse_candidate(
         item.get(
             "id"
         )
-    )
+    ).strip()
+
 
     downloads = (
         _extract_download_urls(
@@ -1129,9 +1822,12 @@ def _parse_candidate(
         )
     )
 
-    categories = item.get(
-        "subjectCategories",
-        [],
+
+    categories = (
+        item.get(
+            "subjectCategories",
+            [],
+        )
     )
 
     if not isinstance(
@@ -1145,9 +1841,12 @@ def _parse_candidate(
             )
         ]
 
-    center = item.get(
-        "center",
-        {},
+
+    center = (
+        item.get(
+            "center",
+            {},
+        )
     )
 
     if not isinstance(
@@ -1157,34 +1856,27 @@ def _parse_candidate(
 
         center = {}
 
-    raw_score = (
-        item.get(
-            "_meta",
-            {},
-        )
-        if isinstance(
-            item.get(
-                "_meta",
-                {},
-            ),
-            dict,
-        )
-        else {}
-    )
-
-    api_score = (
-        raw_score.get(
-            "score"
-        )
-    )
 
     record_url = (
         f"https://ntrs.nasa.gov/"
         f"citations/{source_id}"
     )
 
+
+    api_score = (
+        _safe_float(
+            item.get(
+                "score"
+            )
+        )
+    )
+
+
     return {
-        "source": "ntrs",
+
+        "source": (
+            "ntrs"
+        ),
 
         "source_id": (
             source_id
@@ -1266,11 +1958,24 @@ def _parse_candidate(
             topic_axis
         ),
 
-        "language": "en",
+        "language": (
+            "en"
+        ),
 
         "matched_queries": [
             query_name
         ],
+
+        "query_scores": {
+
+            query_name: (
+                api_score
+            ),
+        },
+
+        "api_score_max": (
+            api_score
+        ),
 
         "distribution": (
             item.get(
@@ -1286,18 +1991,16 @@ def _parse_candidate(
 
         "downloads_available": (
             item.get(
-                "downloadsAvailable"
+                "downloadsAvailable",
+                False,
             )
         ),
 
         "only_abstract": (
             item.get(
-                "onlyAbstract"
+                "onlyAbstract",
+                False,
             )
-        ),
-
-        "api_score": (
-            api_score
         ),
 
         "downloads": (
@@ -1307,6 +2010,7 @@ def _parse_candidate(
         ),
 
         "metadata": {
+
             "center_code": (
                 center.get(
                     "code"
@@ -1346,21 +2050,21 @@ def _parse_candidate(
             "keywords": (
                 item.get(
                     "keywords",
-                    []
+                    [],
                 )
             ),
 
             "other_report_numbers": (
                 item.get(
                     "otherReportNumbers",
-                    []
+                    [],
                 )
             ),
 
             "source_identifiers": (
                 item.get(
                     "sourceIdentifiers",
-                    []
+                    [],
                 )
             ),
         },
@@ -1372,6 +2076,7 @@ def _parse_candidate(
 # ============================================================
 
 def search_single_query(
+    *,
     topic_axis: str,
     query_name: str,
     query: str,
@@ -1398,15 +2103,22 @@ def search_single_query(
 
     print("-" * 70)
 
+
     # ========================================================
     # Cache
     # ========================================================
 
-    cached = _load_query_cache(
-        topic_axis=topic_axis,
-        query_name=query_name,
-        query=query,
-        max_results=max_results,
+    cached = (
+        _load_query_cache(
+
+            topic_axis=topic_axis,
+
+            query_name=query_name,
+
+            query=query,
+
+            max_results=max_results,
+        )
     )
 
     if cached is not None:
@@ -1418,35 +2130,48 @@ def search_single_query(
 
         return cached
 
+
     # ========================================================
-    # NASA API
+    # API
     # ========================================================
 
     payload = (
         _request_ntrs_search(
+
             query=query,
+
             max_results=max_results,
         )
     )
 
-    stats = payload.get(
-        "stats",
-        {},
+
+    stats = (
+        payload.get(
+            "stats",
+            {},
+        )
     )
 
     if not isinstance(
         stats,
         dict,
     ):
+
         stats = {}
 
-    api_total = stats.get(
-        "total"
+
+    api_total = (
+        stats.get(
+            "total"
+        )
     )
 
-    raw_results = payload.get(
-        "results",
-        [],
+
+    raw_results = (
+        payload.get(
+            "results",
+            [],
+        )
     )
 
     if not isinstance(
@@ -1455,9 +2180,10 @@ def search_single_query(
     ):
 
         raise RuntimeError(
-            "NASA NTRS response does not "
-            "contain a results list."
+            "NASA NTRS response has no "
+            "valid results list."
         )
+
 
     print(
         f"[NTRS] API total matches : "
@@ -1469,21 +2195,17 @@ def search_single_query(
         f"{len(raw_results)}"
     )
 
+
     # ========================================================
-    # Sanity Check
-    # ========================================================
+    # Sanity Gate
     #
-    # 이전 잘못된 호출은 모든 query가
-    # 전체 repository count 약 647k를 반환했다.
-    #
-    # 지금 query가 매우 구체적인데도 다시
-    # 60만+가 나오면 요청이 적용되지 않은 것일
-    # 가능성이 높으므로 경고.
+    # 검색어 하나를 넣었는데 NASA 전체 60만+ 결과가
+    # 나오는 예전 오류를 즉시 잡는다.
     # ========================================================
 
     try:
 
-        total_int = int(
+        total_number = int(
             api_total
         )
 
@@ -1492,33 +2214,33 @@ def search_single_query(
         ValueError,
     ):
 
-        total_int = None
+        total_number = None
+
 
     if (
-        total_int is not None
-        and total_int > 600000
-        and query.strip()
+        total_number is not None
+        and total_number > 500_000
     ):
 
-        print()
-        print(
-            "[WARNING] Search total is suspiciously large."
+        raise RuntimeError(
+            "NTRS query appears to be ignored. "
+            f"Focused query returned "
+            f"{total_number} total matches."
         )
 
-        print(
-            "[WARNING] Verify that NASA applied the query."
-        )
 
     # ========================================================
-    # Candidate Filter
+    # Filter
     # ========================================================
 
     documents: list[dict] = []
 
+
     rejected_reasons: dict[
         str,
-        int
+        int,
     ] = {}
+
 
     for item in raw_results:
 
@@ -1526,7 +2248,9 @@ def search_single_query(
             item,
             dict,
         ):
+
             continue
+
 
         usable, reason = (
             _candidate_is_usable(
@@ -1548,22 +2272,62 @@ def search_single_query(
 
             continue
 
+
         document = (
             _parse_candidate(
+
                 item=item,
+
                 topic_axis=topic_axis,
+
                 query_name=query_name,
             )
         )
+
+
+        # downloadsAvailable == True인데
+        # 실제 usable URL이 하나도 없는 경우 제외
+
+        if not any(
+            [
+
+                document.get(
+                    "fulltext_url"
+                ),
+
+                document.get(
+                    "pdf_url"
+                ),
+
+                document.get(
+                    "original_url"
+                ),
+            ]
+        ):
+
+            rejected_reasons[
+                "no_download_url"
+            ] = (
+                rejected_reasons.get(
+                    "no_download_url",
+                    0,
+                )
+                + 1
+            )
+
+            continue
+
 
         documents.append(
             document
         )
 
+
     print(
         f"[NTRS] Usable candidates : "
         f"{len(documents)}"
     )
+
 
     if rejected_reasons:
 
@@ -1572,62 +2336,71 @@ def search_single_query(
             f"{rejected_reasons}"
         )
 
+
     # ========================================================
-    # Save Cache
+    # Cache
     # ========================================================
 
     _save_query_cache(
+
         topic_axis=topic_axis,
+
         query_name=query_name,
+
         query=query,
+
         max_results=max_results,
+
         documents=documents,
+
         api_total=api_total,
-        returned_count=len(
-            raw_results
+
+        rejected_reasons=(
+            rejected_reasons
         ),
     )
 
+
     # ========================================================
-    # Delay
+    # Request interval
     # ========================================================
 
     time.sleep(
         settings.request_delay
     )
 
+
     return documents
 
 
 # ============================================================
-# Merge
+# Merge / Deduplicate
 # ============================================================
 
 def _merge_documents(
     documents: list[dict],
 ) -> list[dict]:
-    """
-    NTRS source_id 기준 dedup.
-
-    같은 문서가 여러 query에서 검색되면
-    matched_queries만 합친다.
-    """
 
     merged: dict[
         str,
-        dict
+        dict,
     ] = {}
+
 
     for document in documents:
 
-        source_id = (
+        source_id = str(
             document.get(
-                "source_id"
+                "source_id",
+                "",
             )
-        )
+        ).strip()
+
 
         if not source_id:
+
             continue
+
 
         if source_id not in merged:
 
@@ -1637,11 +2410,17 @@ def _merge_documents(
 
             continue
 
+
         existing = (
             merged[
                 source_id
             ]
         )
+
+
+        # ====================================================
+        # Matched queries
+        # ====================================================
 
         existing_queries = (
             existing.setdefault(
@@ -1649,6 +2428,7 @@ def _merge_documents(
                 [],
             )
         )
+
 
         for query_name in document.get(
             "matched_queries",
@@ -1664,115 +2444,369 @@ def _merge_documents(
                     query_name
                 )
 
-        # 더 높은 API score가 있다면 보존
-        old_score = (
-            existing.get(
-                "api_score"
+
+        # ====================================================
+        # API scores
+        # ====================================================
+
+        existing_query_scores = (
+            existing.setdefault(
+                "query_scores",
+                {},
             )
         )
 
-        new_score = (
-            document.get(
-                "api_score"
+
+        for (
+            query_name,
+            score,
+        ) in document.get(
+            "query_scores",
+            {},
+        ).items():
+
+            previous_score = (
+                _safe_float(
+                    existing_query_scores.get(
+                        query_name
+                    )
+                )
             )
+
+            current_score = (
+                _safe_float(
+                    score
+                )
+            )
+
+            if (
+                current_score is not None
+                and (
+                    previous_score is None
+                    or current_score
+                    > previous_score
+                )
+            ):
+
+                existing_query_scores[
+                    query_name
+                ] = current_score
+
+
+        score_values = [
+
+            score
+
+            for score in (
+
+                _safe_float(
+                    value
+                )
+
+                for value
+                in existing_query_scores.values()
+            )
+
+            if score is not None
+        ]
+
+
+        existing[
+            "api_score_max"
+        ] = (
+
+            max(
+                score_values
+            )
+
+            if score_values
+
+            else None
         )
 
-        try:
 
-            old_score_value = float(
-                old_score
-                or 0
-            )
-
-        except (
-            TypeError,
-            ValueError,
-        ):
-
-            old_score_value = 0.0
-
-        try:
-
-            new_score_value = float(
-                new_score
-                or 0
-            )
-
-        except (
-            TypeError,
-            ValueError,
-        ):
-
-            new_score_value = 0.0
-
-        if (
-            new_score_value
-            > old_score_value
-        ):
-
-            existing[
-                "api_score"
-            ] = new_score
-
-    # ========================================================
-    # Human review priority
-    # ========================================================
-    #
-    # 여러 query에 동시에 걸린 문서 우선.
-    # 같은 경우 API relevance score 활용.
-    # ========================================================
-
-    merged_list = list(
+    return list(
         merged.values()
     )
 
-    def _sort_key(
-        document: dict,
-    ):
 
-        query_count = len(
-            document.get(
-                "matched_queries",
-                [],
-            )
+# ============================================================
+# Exclude Existing DB Documents
+# ============================================================
+
+def _exclude_existing_documents(
+    documents: list[dict],
+    existing_ntrs: dict[
+        str,
+        str,
+    ],
+) -> tuple[
+    list[dict],
+    list[dict],
+]:
+
+    eligible = []
+
+    excluded = []
+
+
+    for document in documents:
+
+        source_id = (
+            document[
+                "source_id"
+            ]
         )
 
-        try:
 
-            score = float(
+        if source_id in existing_ntrs:
+
+            excluded.append(
+                {
+
+                    "source_id": (
+                        source_id
+                    ),
+
+                    "existing_axis": (
+                        existing_ntrs[
+                            source_id
+                        ]
+                    ),
+
+                    "candidate_axis": (
+                        document[
+                            "topic_axis"
+                        ]
+                    ),
+
+                    "title": (
+                        document[
+                            "title"
+                        ]
+                    ),
+                }
+            )
+
+            continue
+
+
+        eligible.append(
+            document
+        )
+
+
+    return (
+        eligible,
+        excluded,
+    )
+
+
+# ============================================================
+# Human Review Ranking
+# ============================================================
+
+def _keyword_hits(
+    topic_axis: str,
+    document: dict,
+) -> list[str]:
+
+    text = " ".join(
+        [
+
+            str(
                 document.get(
-                    "api_score"
+                    "title",
+                    "",
                 )
-                or 0
+            ),
+
+            str(
+                document.get(
+                    "abstract",
+                    "",
+                )
+            ),
+
+            " ".join(
+                str(
+                    value
+                )
+
+                for value
+                in document.get(
+                    "categories",
+                    [],
+                )
+            ),
+        ]
+    ).lower()
+
+
+    hits = []
+
+
+    for keyword in AXIS_KEYWORDS[
+        topic_axis
+    ]:
+
+        if keyword.lower() in text:
+
+            hits.append(
+                keyword
             )
 
-        except (
-            TypeError,
-            ValueError,
-        ):
 
-            score = 0.0
+    return hits
 
-        return (
-            query_count,
-            score,
+
+def _decorate_for_review(
+    topic_axis: str,
+    documents: list[dict],
+) -> list[dict]:
+
+    decorated = []
+
+
+    for document in documents:
+
+        item = dict(
+            document
         )
 
-    merged_list.sort(
-        key=_sort_key,
+
+        hits = (
+            _keyword_hits(
+                topic_axis,
+                document,
+            )
+        )
+
+
+        item[
+            "review_signals"
+        ] = {
+
+            "axis_keyword_hits": (
+                hits
+            ),
+
+            "axis_keyword_hit_count": (
+                len(hits)
+            ),
+
+            "matched_query_count": (
+                len(
+                    item.get(
+                        "matched_queries",
+                        [],
+                    )
+                )
+            ),
+
+            "api_score_max": (
+                item.get(
+                    "api_score_max"
+                )
+            ),
+        }
+
+
+        decorated.append(
+            item
+        )
+
+
+    # ========================================================
+    # Human review용 정렬
+    #
+    # 자동선정 아님.
+    # ========================================================
+
+    decorated.sort(
+
+        key=lambda item: (
+
+            item.get(
+                "review_signals",
+                {},
+            ).get(
+                "axis_keyword_hit_count",
+                0,
+            ),
+
+            item.get(
+                "review_signals",
+                {},
+            ).get(
+                "matched_query_count",
+                0,
+            ),
+
+            (
+                item.get(
+                    "review_signals",
+                    {},
+                ).get(
+                    "api_score_max"
+                )
+                or 0.0
+            ),
+
+            item.get(
+                "published_at"
+            )
+            or "",
+        ),
+
         reverse=True,
     )
 
-    return merged_list
+
+    return decorated
+
+
+def _build_review_pool(
+    topic_axis: str,
+    documents: list[dict],
+) -> list[dict]:
+
+    target_count = (
+        TARGET_NEW_COUNTS[
+            topic_axis
+        ]
+    )
+
+
+    desired_review_count = (
+        target_count
+        * REVIEW_POOL_MULTIPLIER
+    )
+
+
+    review_count = min(
+        len(documents),
+        desired_review_count,
+    )
+
+
+    return documents[
+        :review_count
+    ]
 
 
 # ============================================================
-# Search Axis
+# Search One Axis
 # ============================================================
 
 def search_axis(
+    *,
     topic_axis: str,
-) -> list[dict]:
+    existing_ntrs: dict[
+        str,
+        str,
+    ],
+) -> dict:
 
     queries = (
         NTRS_QUERIES[
@@ -1780,95 +2814,363 @@ def search_axis(
         ]
     )
 
+
     print()
     print("=" * 70)
 
     print(
-        f"[AXIS] {topic_axis}"
+        f"[AXIS] "
+        f"{topic_axis}"
     )
 
     print(
-        f"[AXIS] Query count: "
+        f"[AXIS] Query count         : "
         f"{len(queries)}"
+    )
+
+    print(
+        f"[AXIS] New target          : "
+        f"{TARGET_NEW_COUNTS[topic_axis]}"
     )
 
     print("=" * 70)
 
-    raw_documents: list[dict] = []
+
+    raw_documents = []
+
 
     for query_spec in queries:
 
-        documents = (
+        query_documents = (
             search_single_query(
+
                 topic_axis=topic_axis,
+
                 query_name=(
                     query_spec[
                         "name"
                     ]
                 ),
+
                 query=(
                     query_spec[
                         "query"
                     ]
                 ),
+
                 max_results=(
                     RESULTS_PER_QUERY
                 ),
             )
         )
 
+
         raw_documents.extend(
-            documents
+            query_documents
         )
 
-    merged = _merge_documents(
-        raw_documents
+
+    # ========================================================
+    # Dedup
+    # ========================================================
+
+    merged = (
+        _merge_documents(
+            raw_documents
+        )
     )
+
+
+    # ========================================================
+    # Existing 15 exclusion
+    # ========================================================
+
+    (
+        eligible,
+        excluded_existing,
+    ) = (
+        _exclude_existing_documents(
+            merged,
+            existing_ntrs,
+        )
+    )
+
+
+    # ========================================================
+    # Human-review signals
+    # ========================================================
+
+    ranked = (
+        _decorate_for_review(
+            topic_axis,
+            eligible,
+        )
+    )
+
+
+    review_pool = (
+        _build_review_pool(
+            topic_axis,
+            ranked,
+        )
+    )
+
+
+    target_count = (
+        TARGET_NEW_COUNTS[
+            topic_axis
+        ]
+    )
+
+
+    desired_review_count = (
+        target_count
+        * REVIEW_POOL_MULTIPLIER
+    )
+
 
     print()
     print(
-        f"[AXIS] Raw usable candidates : "
+        f"[AXIS] Raw usable           : "
         f"{len(raw_documents)}"
     )
 
     print(
-        f"[AXIS] Unique candidates     : "
+        f"[AXIS] Unique               : "
         f"{len(merged)}"
     )
 
-    return merged
+    print(
+        f"[AXIS] Existing DB excluded : "
+        f"{len(excluded_existing)}"
+    )
+
+    print(
+        f"[AXIS] Eligible new         : "
+        f"{len(ranked)}"
+    )
+
+    print(
+        f"[AXIS] Review pool          : "
+        f"{len(review_pool)}"
+    )
+
+    print(
+        f"[AXIS] Desired review pool  : "
+        f"{desired_review_count}"
+    )
+
+
+    # ========================================================
+    # Minimum Gate
+    # ========================================================
+
+    if (
+        len(ranked)
+        < target_count
+    ):
+
+        raise RuntimeError(
+            f"{topic_axis}: "
+            "not enough new candidates.\n"
+            f"Need at least "
+            f"{target_count}, "
+            f"found "
+            f"{len(ranked)}."
+        )
+
+
+    if (
+        len(review_pool)
+        < desired_review_count
+    ):
+
+        print(
+            "[WARN] Review pool is smaller "
+            "than the preferred 4x target."
+        )
+
+        print(
+            "[WARN] Final selection is still "
+            "possible if Human QA finds enough "
+            "high-quality papers."
+        )
+
+
+    return {
+
+        "raw_usable_count": (
+            len(
+                raw_documents
+            )
+        ),
+
+        "unique_count": (
+            len(
+                merged
+            )
+        ),
+
+        "excluded_existing": (
+            excluded_existing
+        ),
+
+        "eligible_documents": (
+            ranked
+        ),
+
+        "review_pool": (
+            review_pool
+        ),
+    }
 
 
 # ============================================================
-# Save Axis Report
+# Save Axis Results
 # ============================================================
 
-def _save_axis_report(
+def _save_axis_results(
+    *,
     topic_axis: str,
-    documents: list[dict],
-) -> Path:
+    result: dict,
+) -> dict:
 
     axis_dir = (
         CACHE_ROOT
         / topic_axis
     )
 
+
     axis_dir.mkdir(
         parents=True,
         exist_ok=True,
     )
 
-    path = (
+
+    all_path = (
+        axis_dir
+        / "_all_candidates.json"
+    )
+
+
+    review_path = (
+        axis_dir
+        / "_review_pool.json"
+    )
+
+
+    # 이후 Resolver/selection과 호환용
+    merged_compat_path = (
         axis_dir
         / "_merged_candidates.json"
     )
 
-    payload = {
-        "cache_version": (
-            CACHE_VERSION
+
+    # ========================================================
+    # All eligible candidates
+    # ========================================================
+
+    all_payload = {
+
+        "collector_version": (
+            COLLECTOR_VERSION
         ),
 
-        "source": "ntrs",
+        "source": (
+            "ntrs"
+        ),
+
+        "topic_axis": (
+            topic_axis
+        ),
+
+        "target_new_count": (
+            TARGET_NEW_COUNTS[
+                topic_axis
+            ]
+        ),
+
+        "existing_db_excluded": (
+            len(
+                result[
+                    "excluded_existing"
+                ]
+            )
+        ),
+
+        "eligible_new_count": (
+            len(
+                result[
+                    "eligible_documents"
+                ]
+            )
+        ),
+
+        "documents": (
+            result[
+                "eligible_documents"
+            ]
+        ),
+    }
+
+
+    # ========================================================
+    # Human QA Review Pool
+    # ========================================================
+
+    review_payload = {
+
+        "collector_version": (
+            COLLECTOR_VERSION
+        ),
+
+        "source": (
+            "ntrs"
+        ),
+
+        "topic_axis": (
+            topic_axis
+        ),
+
+        "target_new_count": (
+            TARGET_NEW_COUNTS[
+                topic_axis
+            ]
+        ),
+
+        "review_pool_multiplier": (
+            REVIEW_POOL_MULTIPLIER
+        ),
+
+        "review_pool_count": (
+            len(
+                result[
+                    "review_pool"
+                ]
+            )
+        ),
+
+        "documents": (
+            result[
+                "review_pool"
+            ]
+        ),
+    }
+
+
+    # ========================================================
+    # Compatibility file
+    # ========================================================
+
+    merged_payload = {
+
+        "collector_version": (
+            COLLECTOR_VERSION
+        ),
+
+        "source": (
+            "ntrs"
+        ),
 
         "topic_axis": (
             topic_axis
@@ -1876,37 +3178,209 @@ def _save_axis_report(
 
         "unique_candidates": (
             len(
-                documents
+                result[
+                    "eligible_documents"
+                ]
             )
         ),
 
         "documents": (
-            documents
+            result[
+                "eligible_documents"
+            ]
         ),
     }
 
-    path.write_text(
-        json.dumps(
-            payload,
-            ensure_ascii=False,
-            indent=2,
-            default=str,
-        ),
-        encoding="utf-8",
+
+    _save_json(
+        all_path,
+        all_payload,
+    )
+
+
+    _save_json(
+        review_path,
+        review_payload,
+    )
+
+
+    _save_json(
+        merged_compat_path,
+        merged_payload,
+    )
+
+
+    print(
+        f"[REPORT] All candidates : "
+        f"{all_path}"
     )
 
     print(
-        f"[REPORT] Saved: {path}"
+        f"[REPORT] Review pool    : "
+        f"{review_path}"
     )
 
-    return path
+    print(
+        f"[REPORT] Merged compat  : "
+        f"{merged_compat_path}"
+    )
+
+
+    return {
+
+        "all_candidates": (
+            str(
+                all_path
+            )
+        ),
+
+        "review_pool": (
+            str(
+                review_path
+            )
+        ),
+
+        "merged_candidates": (
+            str(
+                merged_compat_path
+            )
+        ),
+    }
 
 
 # ============================================================
-# Console Candidate Preview
+# Cross-Axis Overlap
 # ============================================================
 
-def print_candidates(
+def _find_cross_axis_overlaps(
+    axis_results: dict[
+        str,
+        dict,
+    ],
+) -> list[dict]:
+
+    ownership: dict[
+        str,
+        list[
+            tuple[
+                str,
+                dict,
+            ]
+        ],
+    ] = {}
+
+
+    for (
+        topic_axis,
+        result,
+    ) in axis_results.items():
+
+        for document in result[
+            "eligible_documents"
+        ]:
+
+            source_id = (
+                document[
+                    "source_id"
+                ]
+            )
+
+
+            ownership.setdefault(
+                source_id,
+                [],
+            ).append(
+                (
+                    topic_axis,
+                    document,
+                )
+            )
+
+
+    overlaps = []
+
+
+    for (
+        source_id,
+        entries,
+    ) in ownership.items():
+
+        axes = [
+
+            topic_axis
+
+            for (
+                topic_axis,
+                _document,
+            )
+            in entries
+        ]
+
+
+        if (
+            len(
+                set(
+                    axes
+                )
+            )
+            <= 1
+        ):
+
+            continue
+
+
+        first_document = (
+            entries[
+                0
+            ][
+                1
+            ]
+        )
+
+
+        overlaps.append(
+            {
+
+                "source_id": (
+                    source_id
+                ),
+
+                "title": (
+                    first_document.get(
+                        "title"
+                    )
+                ),
+
+                "axes": (
+                    sorted(
+                        set(
+                            axes
+                        )
+                    )
+                ),
+            }
+        )
+
+
+    overlaps.sort(
+
+        key=lambda item: (
+            item[
+                "source_id"
+            ]
+        )
+    )
+
+
+    return overlaps
+
+
+# ============================================================
+# Console Preview
+# ============================================================
+
+def print_review_candidates(
+    *,
     topic_axis: str,
     documents: list[dict],
 ) -> None:
@@ -1916,15 +3390,35 @@ def print_candidates(
 
     print(
         f"{topic_axis} - "
-        f"{len(documents)} unique candidates"
+        f"Human Review Pool "
+        f"({len(documents)})"
     )
 
     print("=" * 70)
 
-    for index, document in enumerate(
-        documents,
+
+    preview_documents = (
+        documents[
+            :CONSOLE_PREVIEW_LIMIT
+        ]
+    )
+
+
+    for (
+        index,
+        document,
+    ) in enumerate(
+        preview_documents,
         start=1,
     ):
+
+        signals = (
+            document.get(
+                "review_signals",
+                {},
+            )
+        )
+
 
         print()
 
@@ -1948,16 +3442,9 @@ def print_candidates(
             f"{document['published_at']}"
         )
 
-        categories = (
-            document.get(
-                "categories",
-                [],
-            )
-        )
-
         print(
             f"    Categories: "
-            f"{', '.join(map(str, categories))}"
+            f"{', '.join(document['categories'])}"
         )
 
         print(
@@ -1966,19 +3453,15 @@ def print_candidates(
         )
 
         print(
-            f"    API score: "
-            f"{document.get('api_score')}"
+            f"    Axis keyword hits: "
+            f"{signals.get('axis_keyword_hit_count', 0)}"
         )
 
         print(
-            f"    Downloads available: "
-            f"{document.get('downloads_available')}"
+            f"    API score max: "
+            f"{signals.get('api_score_max')}"
         )
 
-        print(
-            f"    onlyAbstract: "
-            f"{document.get('only_abstract')}"
-        )
 
         abstract = (
             document.get(
@@ -1987,14 +3470,18 @@ def print_candidates(
             )
         )
 
+
         if len(
             abstract
-        ) > 500:
+        ) > 350:
 
             abstract = (
-                abstract[:500]
+                abstract[
+                    :350
+                ]
                 + "..."
             )
+
 
         print(
             f"    Abstract: "
@@ -2022,48 +3509,197 @@ def print_candidates(
         )
 
 
+    if (
+        len(documents)
+        > CONSOLE_PREVIEW_LIMIT
+    ):
+
+        print()
+
+        print(
+            f"... console preview limited "
+            f"to "
+            f"{CONSOLE_PREVIEW_LIMIT}."
+        )
+
+        print(
+            "Review the JSON file for "
+            "the complete pool."
+        )
+
+
+# ============================================================
+# Global Report
+# ============================================================
+
+def _save_global_report(
+    *,
+    existing_ntrs: dict[
+        str,
+        str,
+    ],
+    axis_results: dict[
+        str,
+        dict,
+    ],
+    axis_paths: dict[
+        str,
+        dict,
+    ],
+    overlaps: list[dict],
+) -> None:
+
+    REPORT_DIR.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+
+    payload = {
+
+        "collector_version": (
+            COLLECTOR_VERSION
+        ),
+
+        "source": (
+            "ntrs"
+        ),
+
+        "current_db": {
+
+            "existing_ntrs_count": (
+                len(
+                    existing_ntrs
+                )
+            ),
+
+            "existing_ntrs_ids": (
+                sorted(
+                    existing_ntrs.keys()
+                )
+            ),
+        },
+
+        "target_new_counts": (
+            TARGET_NEW_COUNTS
+        ),
+
+        "target_new_total": (
+            TARGET_NEW_TOTAL
+        ),
+
+        "results_per_query": (
+            RESULTS_PER_QUERY
+        ),
+
+        "review_pool_multiplier": (
+            REVIEW_POOL_MULTIPLIER
+        ),
+
+        "axis_results": {
+
+            topic_axis: {
+
+                "query_count": (
+                    len(
+                        NTRS_QUERIES[
+                            topic_axis
+                        ]
+                    )
+                ),
+
+                "raw_usable_count": (
+                    result[
+                        "raw_usable_count"
+                    ]
+                ),
+
+                "unique_count": (
+                    result[
+                        "unique_count"
+                    ]
+                ),
+
+                "existing_db_excluded": (
+                    len(
+                        result[
+                            "excluded_existing"
+                        ]
+                    )
+                ),
+
+                "eligible_new_count": (
+                    len(
+                        result[
+                            "eligible_documents"
+                        ]
+                    )
+                ),
+
+                "review_pool_count": (
+                    len(
+                        result[
+                            "review_pool"
+                        ]
+                    )
+                ),
+
+                "paths": (
+                    axis_paths[
+                        topic_axis
+                    ]
+                ),
+            }
+
+            for (
+                topic_axis,
+                result,
+            )
+            in axis_results.items()
+        },
+
+        "cross_axis_overlap_count": (
+            len(
+                overlaps
+            )
+        ),
+
+        "cross_axis_overlaps": (
+            overlaps
+        ),
+    }
+
+
+    _save_json(
+        REPORT_FILE,
+        payload,
+    )
+
+
 # ============================================================
 # Main
 # ============================================================
 
 def main():
-    """
-    NASA NTRS metadata 후보 수집.
-
-    현재 단계에서는:
-
-    O metadata search
-    O axis별 후보 생성
-    O dedup
-    O cache
-
-    아직:
-
-    X fulltext 다운로드
-    X PDF parsing
-    X cleaning
-    X AWS DB insert
-
-    최종 5편/axis는 사람이 검토 후 선정한다.
-    """
 
     print()
     print("=" * 70)
 
     print(
-        "TEAM B - NASA NTRS Metadata Collection v2"
+        "TEAM B - NASA NTRS "
+        "Core-100 Candidate Collector"
     )
 
     print("=" * 70)
 
     print(
-        f"API            : "
-        f"{NTRS_SEARCH_URL}"
+        f"Version        : "
+        f"{COLLECTOR_VERSION}"
     )
 
     print(
-        f"Cache version  : "
-        f"{CACHE_VERSION}"
+        f"API            : "
+        f"{NTRS_SEARCH_URL}"
     )
 
     print(
@@ -2081,34 +3717,102 @@ def main():
         f"{CACHE_ROOT}"
     )
 
-    all_results: dict[
-        str,
-        list[dict]
-    ] = {}
+
+    print()
+    print(
+        "New NTRS target:"
+    )
+
+
+    for (
+        topic_axis,
+        count,
+    ) in TARGET_NEW_COUNTS.items():
+
+        print(
+            f"  "
+            f"{topic_axis:22} : "
+            f"{count}"
+        )
+
+
+    print(
+        f"  "
+        f"{'TOTAL':22} : "
+        f"{TARGET_NEW_TOTAL}"
+    )
+
+
+    # ========================================================
+    # 1. Existing DB exclusion list
+    # ========================================================
+
+    existing_ntrs = (
+        _load_existing_ntrs_from_db()
+    )
+
+
+    # ========================================================
+    # 2. Collection
+    # ========================================================
+
+    axis_results = {}
+
+    axis_paths = {}
+
 
     for topic_axis in NTRS_QUERIES:
 
         try:
 
-            documents = (
+            result = (
                 search_axis(
-                    topic_axis
+
+                    topic_axis=(
+                        topic_axis
+                    ),
+
+                    existing_ntrs=(
+                        existing_ntrs
+                    ),
                 )
             )
 
-            _save_axis_report(
-                topic_axis,
-                documents,
-            )
 
-            print_candidates(
-                topic_axis,
-                documents,
-            )
-
-            all_results[
+            axis_results[
                 topic_axis
-            ] = documents
+            ] = result
+
+
+            axis_paths[
+                topic_axis
+            ] = (
+                _save_axis_results(
+
+                    topic_axis=(
+                        topic_axis
+                    ),
+
+                    result=(
+                        result
+                    ),
+                )
+            )
+
+
+            print_review_candidates(
+
+                topic_axis=(
+                    topic_axis
+                ),
+
+                documents=(
+                    result[
+                        "review_pool"
+                    ]
+                ),
+            )
+
 
         except Exception as exc:
 
@@ -2127,65 +3831,143 @@ def main():
             )
 
             print()
+
             print(
-                "Completed v2 query caches "
+                "Completed query caches "
                 "have been preserved."
             )
 
             print("=" * 70)
 
-            return
+            raise
+
 
     # ========================================================
-    # Summary
+    # 3. Cross-axis overlap
+    # ========================================================
+
+    overlaps = (
+        _find_cross_axis_overlaps(
+            axis_results
+        )
+    )
+
+
+    # ========================================================
+    # 4. Global report
+    # ========================================================
+
+    _save_global_report(
+
+        existing_ntrs=(
+            existing_ntrs
+        ),
+
+        axis_results=(
+            axis_results
+        ),
+
+        axis_paths=(
+            axis_paths
+        ),
+
+        overlaps=(
+            overlaps
+        ),
+    )
+
+
+    # ========================================================
+    # 5. Final Summary
     # ========================================================
 
     print()
     print("=" * 70)
 
     print(
-        "NTRS metadata collection completed."
+        "NTRS CORE-100 CANDIDATE "
+        "COLLECTION COMPLETED"
     )
 
     print("=" * 70)
 
-    total = 0
 
     for (
         topic_axis,
-        documents,
-    ) in all_results.items():
-
-        count = len(
-            documents
-        )
-
-        total += count
+        result,
+    ) in axis_results.items():
 
         print(
-            f"{topic_axis:22} : "
-            f"{count}"
+            f"{topic_axis:22} | "
+            f"eligible "
+            f"{len(result['eligible_documents']):3} | "
+            f"review "
+            f"{len(result['review_pool']):3} | "
+            f"need "
+            f"{TARGET_NEW_COUNTS[topic_axis]:2}"
         )
+
 
     print("-" * 70)
 
+
     print(
-        f"Axis-level unique total : "
-        f"{total}"
+        f"Existing NTRS excluded : "
+        f"{len(existing_ntrs)}"
     )
+
+    print(
+        f"Cross-axis overlaps    : "
+        f"{len(overlaps)}"
+    )
+
+    print(
+        f"Report                 : "
+        f"{REPORT_FILE}"
+    )
+
 
     print()
     print(
-        "Next:"
+        "[PASS] Candidate pools are ready "
+        "for Human QA."
+    )
+
+
+    print()
+    print(
+        "NEXT:"
     )
 
     print(
-        "Review candidates and select "
-        "5 papers per axis."
+        "1. Review each "
+        "_review_pool.json"
     )
 
     print(
-        "Do NOT download full text yet."
+        "2. Select:"
+    )
+
+    print(
+        "   rover_autonomy       12"
+    )
+
+    print(
+        "   onboard_ai           12"
+    )
+
+    print(
+        "   satellite_autonomy   11"
+    )
+
+    print(
+        "3. Do not select the same "
+        "NTRS ID for multiple axes."
+    )
+
+    print(
+        "4. Do NOT download/resolve "
+        "full text until selection is frozen."
     )
 
     print("=" * 70)

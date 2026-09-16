@@ -8,8 +8,74 @@ from app.config import PROJECT_ROOT
 
 
 # ============================================================
+# TEAM B - NASA NTRS Core-100 Cleaner
+# ============================================================
+#
+# Pipeline:
+#
+# ntrs_core100_selected.json
+#          ↓
+# frozen new 35 ONLY
+#          ↓
+# parsed_document.json
+# raw_content.txt
+#          ↓
+# normalize
+# remove obvious residue
+# remove references/back-matter
+# preserve academic sentences
+#          ↓
+# clean_content.txt
+# cleaned_document.json
+#          ↓
+# quality gate
+#          ↓
+# SHA-256 duplicate QA
+#          ↓
+# 35 / 35 PASS
+#
+#
+# IMPORTANT
+#
+# - Pilot 15 documents are NOT processed again.
+# - Do NOT glob every parsed_document.json.
+# - Frozen manifest is the canonical source.
+# - Thresholds are NOT lowered for short documents.
+# - Cleaning is conservative.
+# ============================================================
+
+
+CLEANER_VERSION = "core100_v1"
+
+NORMALIZATION_VERSION = "v1"
+
+
+# ============================================================
+# Expected Frozen Selection
+# ============================================================
+
+EXPECTED_COUNTS = {
+    "rover_autonomy": 12,
+    "onboard_ai": 12,
+    "satellite_autonomy": 11,
+}
+
+EXPECTED_TOTAL = sum(
+    EXPECTED_COUNTS.values()
+)
+
+
+# ============================================================
 # Paths
 # ============================================================
+
+SELECTION_FILE = (
+    PROJECT_ROOT
+    / "data"
+    / "selections"
+    / "ntrs_core100_selected.json"
+)
+
 
 RESOLVED_ROOT = (
     PROJECT_ROOT
@@ -18,61 +84,47 @@ RESOLVED_ROOT = (
     / "ntrs_resolved"
 )
 
+
 REPORT_DIR = (
     PROJECT_ROOT
     / "data"
     / "reports"
 )
 
+
 REPORT_FILE = (
     REPORT_DIR
-    / "ntrs_cleaning_report.json"
+    / "ntrs_core100_cleaning_report.json"
 )
-
-
-# ============================================================
-# Normalization Version
-# ============================================================
-#
-# arXiv와 동일하게 v1.
-#
-# 나중에 cleaning rule을 변경하면
-# v2로 올린다.
-# ============================================================
-
-NORMALIZATION_VERSION = "v1"
 
 
 # ============================================================
 # Quality Thresholds
 # ============================================================
 #
-# arXiv Core와 같은 기준을 사용한다.
+# arXiv Core와 동일한 baseline.
 #
+# 낮추지 않는다.
 # ============================================================
 
 MIN_CHAR_COUNT = 5_000
+
 MIN_WORD_COUNT = 800
+
 MIN_ALPHA_RATIO = 0.45
+
 MIN_SECTION_COUNT = 2
 
 
 # ============================================================
-# Remove Sections
-# ============================================================
-#
-# 논문 본문 자체가 아니라 publication residue에 가까운
-# section들.
-#
-# References가 시작되면 뒤쪽 bibliography 전체를
-# clean body에서는 제외한다.
-#
+# Sections Removed From Clean Corpus
 # ============================================================
 
 REFERENCE_HEADINGS = {
     "reference",
     "references",
     "bibliography",
+    "bibliographies",
     "literature cited",
     "works cited",
 }
@@ -112,11 +164,28 @@ def _load_json(
     path: Path,
 ) -> dict:
 
-    return json.loads(
-        path.read_text(
-            encoding="utf-8"
+    if not path.exists():
+
+        raise FileNotFoundError(
+            f"JSON file not found: {path}"
         )
-    )
+
+    try:
+
+        return json.loads(
+            path.read_text(
+                encoding="utf-8",
+            )
+        )
+
+    except (
+        json.JSONDecodeError,
+        UnicodeDecodeError,
+    ) as exc:
+
+        raise RuntimeError(
+            f"Invalid JSON file: {path}"
+        ) from exc
 
 
 def _save_json(
@@ -141,6 +210,401 @@ def _save_json(
 
 
 # ============================================================
+# Frozen Selection
+# ============================================================
+
+def _load_selection() -> dict[
+    str,
+    list[str],
+]:
+
+    payload = (
+        _load_json(
+            SELECTION_FILE
+        )
+    )
+
+    # ========================================================
+    # Version
+    # ========================================================
+
+    selection_version = (
+        payload.get(
+            "selection_version"
+        )
+    )
+
+    if (
+        selection_version is not None
+        and selection_version
+        != CLEANER_VERSION
+    ):
+
+        raise RuntimeError(
+            "Selection version mismatch.\n"
+            f"Expected: {CLEANER_VERSION}\n"
+            f"Found   : {selection_version}"
+        )
+
+    # ========================================================
+    # Source
+    # ========================================================
+
+    source = str(
+        payload.get(
+            "source",
+            "",
+        )
+    ).strip().lower()
+
+    if (
+        source
+        and source != "ntrs"
+    ):
+
+        raise RuntimeError(
+            "Unexpected selection source: "
+            f"{source}"
+        )
+
+    # ========================================================
+    # Frozen IDs
+    # ========================================================
+
+    selected_documents = (
+        payload.get(
+            "selected_documents"
+        )
+    )
+
+    if not isinstance(
+        selected_documents,
+        dict,
+    ):
+
+        raise RuntimeError(
+            "selected_documents missing "
+            "from NTRS selection manifest."
+        )
+
+    result: dict[
+        str,
+        list[str],
+    ] = {}
+
+    global_seen = set()
+
+    for (
+        topic_axis,
+        expected_count,
+    ) in EXPECTED_COUNTS.items():
+
+        source_ids = (
+            selected_documents.get(
+                topic_axis
+            )
+        )
+
+        if not isinstance(
+            source_ids,
+            list,
+        ):
+
+            raise RuntimeError(
+                f"{topic_axis}: "
+                "selection is not a list."
+            )
+
+        normalized_ids = []
+
+        for raw_source_id in source_ids:
+
+            source_id = str(
+                raw_source_id
+            ).strip()
+
+            if not source_id:
+
+                raise RuntimeError(
+                    f"{topic_axis}: "
+                    "empty source_id."
+                )
+
+            if source_id in global_seen:
+
+                raise RuntimeError(
+                    "Cross-axis duplicate "
+                    f"source_id: {source_id}"
+                )
+
+            global_seen.add(
+                source_id
+            )
+
+            normalized_ids.append(
+                source_id
+            )
+
+        if (
+            len(
+                normalized_ids
+            )
+            != expected_count
+        ):
+
+            raise RuntimeError(
+                f"{topic_axis}: "
+                f"expected {expected_count}, "
+                f"found "
+                f"{len(normalized_ids)}."
+            )
+
+        result[
+            topic_axis
+        ] = normalized_ids
+
+    total = sum(
+        len(
+            source_ids
+        )
+        for source_ids
+        in result.values()
+    )
+
+    if total != EXPECTED_TOTAL:
+
+        raise RuntimeError(
+            f"Expected {EXPECTED_TOTAL} "
+            f"selected NTRS documents, "
+            f"found {total}."
+        )
+
+    return result
+
+
+# ============================================================
+# Preflight Frozen Parsed Documents
+# ============================================================
+
+def _validate_parsed_identity(
+    *,
+    parsed_path: Path,
+    topic_axis: str,
+    source_id: str,
+) -> None:
+
+    parsed = (
+        _load_json(
+            parsed_path
+        )
+    )
+
+    source_info = (
+        parsed.get(
+            "source_info",
+            {},
+        )
+    )
+
+    if not isinstance(
+        source_info,
+        dict,
+    ):
+
+        source_info = {}
+
+    parsed_source = str(
+        source_info.get(
+            "source",
+            "",
+        )
+    ).strip().lower()
+
+    if (
+        parsed_source
+        and parsed_source != "ntrs"
+    ):
+
+        raise RuntimeError(
+            f"{source_id}: "
+            "parsed source mismatch: "
+            f"{parsed_source}"
+        )
+
+    parsed_source_id = str(
+        source_info.get(
+            "source_id",
+            "",
+        )
+    ).strip()
+
+    if (
+        parsed_source_id
+        and parsed_source_id
+        != source_id
+    ):
+
+        raise RuntimeError(
+            f"{source_id}: "
+            "parsed source_id mismatch: "
+            f"{parsed_source_id}"
+        )
+
+    parsed_axis = str(
+        source_info.get(
+            "topic_axis",
+            "",
+        )
+    ).strip()
+
+    if (
+        parsed_axis
+        and parsed_axis
+        != topic_axis
+    ):
+
+        raise RuntimeError(
+            f"{source_id}: "
+            "parsed topic_axis mismatch: "
+            f"{parsed_axis}"
+        )
+
+    sections = (
+        parsed.get(
+            "sections"
+        )
+    )
+
+    if not isinstance(
+        sections,
+        list,
+    ):
+
+        raise RuntimeError(
+            f"{source_id}: "
+            "parsed sections is not a list."
+        )
+
+    if not sections:
+
+        raise RuntimeError(
+            f"{source_id}: "
+            "parsed sections is empty."
+        )
+
+    raw_path = (
+        parsed_path.parent
+        / "raw_content.txt"
+    )
+
+    if not raw_path.exists():
+
+        raise FileNotFoundError(
+            f"{source_id}: "
+            f"raw_content.txt missing: "
+            f"{raw_path}"
+        )
+
+    raw_content = (
+        raw_path.read_text(
+            encoding="utf-8",
+            errors="replace",
+        )
+    )
+
+    if not raw_content.strip():
+
+        raise RuntimeError(
+            f"{source_id}: "
+            "raw_content.txt is empty."
+        )
+
+
+def _build_selected_documents(
+    selection: dict[
+        str,
+        list[str],
+    ],
+) -> list[
+    tuple[
+        str,
+        str,
+        Path,
+    ]
+]:
+
+    selected = []
+
+    for topic_axis in EXPECTED_COUNTS:
+
+        for source_id in (
+            selection[
+                topic_axis
+            ]
+        ):
+
+            paper_dir = (
+                RESOLVED_ROOT
+                / topic_axis
+                / source_id
+            )
+
+            parsed_path = (
+                paper_dir
+                / "parsed_document.json"
+            )
+
+            if not paper_dir.exists():
+
+                raise FileNotFoundError(
+                    "Resolved document directory "
+                    f"missing: {paper_dir}"
+                )
+
+            if not parsed_path.exists():
+
+                raise FileNotFoundError(
+                    f"{source_id}: "
+                    "parsed_document.json missing."
+                )
+
+            _validate_parsed_identity(
+                parsed_path=(
+                    parsed_path
+                ),
+                topic_axis=(
+                    topic_axis
+                ),
+                source_id=(
+                    source_id
+                ),
+            )
+
+            selected.append(
+                (
+                    topic_axis,
+                    source_id,
+                    parsed_path,
+                )
+            )
+
+    if (
+        len(
+            selected
+        )
+        != EXPECTED_TOTAL
+    ):
+
+        raise RuntimeError(
+            "Parsed document preflight "
+            f"expected {EXPECTED_TOTAL}, "
+            f"found {len(selected)}."
+        )
+
+    return selected
+
+
+# ============================================================
 # Text Normalization
 # ============================================================
 
@@ -148,7 +612,7 @@ def _normalize_text(
     text: str,
 ) -> str:
     """
-    의미를 바꾸지 않는 범위에서만 normalize.
+    의미를 변경하지 않는 범위에서만 normalize.
 
     하지 않는 것:
     - lowercase
@@ -157,7 +621,7 @@ def _normalize_text(
     - 숫자 제거
     - 문장 재작성
 
-    Transformer와 RAG에 원래 학술문장을 남겨야 한다.
+    Transformer/RAG에 원래 학술 문장을 보존한다.
     """
 
     if not text:
@@ -187,6 +651,31 @@ def _normalize_text(
     )
 
     text = text.replace(
+        "\u2009",
+        " ",
+    )
+
+    text = text.replace(
+        "\u202f",
+        " ",
+    )
+
+    text = text.replace(
+        "\u00ad",
+        "",
+    )
+
+    text = text.replace(
+        "\ufb01",
+        "fi",
+    )
+
+    text = text.replace(
+        "\ufb02",
+        "fl",
+    )
+
+    text = text.replace(
         "\r\n",
         "\n",
     )
@@ -201,21 +690,30 @@ def _normalize_text(
         " ",
     )
 
-    # line 내부 중복 space
+    # --------------------------------------------------------
+    # line 내부 여러 space
+    # --------------------------------------------------------
+
     text = re.sub(
         r"[ ]{2,}",
         " ",
         text,
     )
 
-    # punctuation 앞의 이상한 space 일부 정리
+    # --------------------------------------------------------
+    # punctuation 앞 이상한 whitespace
+    # --------------------------------------------------------
+
     text = re.sub(
         r"\s+([,.;:!?])",
         r"\1",
         text,
     )
 
-    # 괄호 바로 안쪽의 이상한 공백
+    # --------------------------------------------------------
+    # 괄호 내부 이상한 whitespace
+    # --------------------------------------------------------
+
     text = re.sub(
         r"\(\s+",
         "(",
@@ -228,7 +726,10 @@ def _normalize_text(
         text,
     )
 
-    # 과도한 빈 줄
+    # --------------------------------------------------------
+    # 과도한 blank line
+    # --------------------------------------------------------
+
     text = re.sub(
         r"\n{3,}",
         "\n\n",
@@ -245,19 +746,6 @@ def _normalize_text(
 def _normalize_heading(
     heading: str,
 ) -> str:
-    """
-    예:
-
-        VII. REFERENCES
-        7 References
-        7. REFERENCES
-
-    모두:
-
-        references
-
-    로 비교 가능하게 만든다.
-    """
 
     heading = (
         _normalize_text(
@@ -266,14 +754,14 @@ def _normalize_heading(
         .strip()
     )
 
-    # --------------------------------------------------------
-    # Leading section numbers
+    # ========================================================
+    # Leading numbering
     #
-    # 1.
-    # 1.2
-    # VII.
-    # A.
-    # --------------------------------------------------------
+    # 1. Introduction
+    # 2.3 Results
+    # VII. REFERENCES
+    # A. Method
+    # ========================================================
 
     heading = re.sub(
         (
@@ -323,10 +811,26 @@ def _is_reference_heading(
         )
     )
 
-    return (
+    if (
         normalized
         in REFERENCE_HEADINGS
-    )
+    ):
+
+        return True
+
+    if normalized.startswith(
+        "references "
+    ):
+
+        return True
+
+    if normalized.startswith(
+        "bibliography "
+    ):
+
+        return True
+
+    return False
 
 
 def _should_remove_section(
@@ -369,7 +873,7 @@ def _is_numeric_noise(
 
         return True
 
-    # page 1 / page 1 of 10
+    # Page 1 / Page 1 of 10
     if re.fullmatch(
         r"page\s+\d+(?:\s+of\s+\d+)?",
         stripped,
@@ -402,9 +906,8 @@ def _is_probable_junk(
     block_type: str,
 ) -> bool:
     """
-    확실한 residue만 제거.
-
-    애매한 것은 보존한다.
+    확실한 residue만 제거한다.
+    애매한 문장은 보존한다.
     """
 
     stripped = (
@@ -430,8 +933,7 @@ def _is_probable_junk(
         return True
 
     # --------------------------------------------------------
-    # Caption은 지나치게 짧으면 의미가 없다.
-    # 기존 arXiv cleaner와 같은 원칙.
+    # 너무 짧은 figure caption
     # --------------------------------------------------------
 
     if (
@@ -439,16 +941,14 @@ def _is_probable_junk(
         == "figure_caption"
         and len(
             stripped
-        ) < 20
+        )
+        < 20
     ):
 
         return True
 
     # --------------------------------------------------------
-    # paragraph가 지나치게 짧고 알파벳도 거의 없으면
-    # TXT conversion residue 가능성이 높다.
-    #
-    # 단, 짧다는 이유만으로 일반 영어 문장을 지우지는 않는다.
+    # 매우 짧고 영문 정보량도 거의 없는 paragraph
     # --------------------------------------------------------
 
     if (
@@ -456,12 +956,14 @@ def _is_probable_junk(
         == "paragraph"
         and len(
             stripped
-        ) < 8
+        )
+        < 8
     ):
 
         alpha_count = sum(
             1
-            for char in stripped
+            for char
+            in stripped
             if char.isalpha()
         )
 
@@ -473,20 +975,15 @@ def _is_probable_junk(
 
 
 # ============================================================
-# Caption Label Cleanup
+# Figure / Table Caption
 # ============================================================
 
 def _clean_caption(
     text: str,
 ) -> str:
     """
-    Fig. 1: ...
-    Figure 2. ...
-    Table IV: ...
-
-    같은 label만 제거.
-
-    caption 내용은 유지한다.
+    Caption 내용은 유지하고
+    Fig. 1 / Figure 2 / Table IV 같은 label만 제거한다.
     """
 
     text = (
@@ -539,12 +1036,24 @@ def _clean_block(
         )
     )
 
+    # parser에서 bibliography marker가 있는 경우
+    if block.get(
+        "in_bibliography",
+        False,
+    ):
+
+        return None
+
     if _is_probable_junk(
         text,
         block_type,
     ):
 
         return None
+
+    # --------------------------------------------------------
+    # Figure/Table caption
+    # --------------------------------------------------------
 
     if (
         block_type
@@ -557,11 +1066,39 @@ def _clean_block(
             )
         )
 
-        if len(
-            text
-        ) < 20:
+        if (
+            len(
+                text
+            )
+            < 20
+        ):
 
             return None
+
+    # --------------------------------------------------------
+    # Equation
+    #
+    # 공격적인 수식 정제는 하지 않는다.
+    # --------------------------------------------------------
+
+    elif (
+        block_type
+        == "equation"
+    ):
+
+        text = (
+            _normalize_text(
+                text
+            )
+        )
+
+    else:
+
+        text = (
+            _normalize_text(
+                text
+            )
+        )
 
     if not text:
 
@@ -571,7 +1108,6 @@ def _clean_block(
         "type": (
             block_type
         ),
-
         "text": (
             text
         ),
@@ -579,25 +1115,20 @@ def _clean_block(
 
 
 # ============================================================
-# Exact Consecutive Duplicate Removal
+# Consecutive Duplicate Removal
 # ============================================================
 
 def _remove_consecutive_duplicates(
     blocks: list[dict],
 ) -> list[dict]:
     """
-    매우 보수적인 dedup.
+    Global dedup은 하지 않는다.
 
-    같은 block이 바로 연속해서 반복된 경우에만 제거한다.
-
-    NASA converted TXT에서 실제로 같은 문장이
-    다른 section에서 의미 있게 재등장할 수도 있으므로
-    global dedup은 하지 않는다.
+    같은 block이 바로 연속해서
+    중복되는 경우만 제거한다.
     """
 
-    result: list[
-        dict
-    ] = []
+    result = []
 
     previous_key = None
 
@@ -623,9 +1154,7 @@ def _remove_consecutive_duplicates(
             block
         )
 
-        previous_key = (
-            key
-        )
+        previous_key = key
 
     return result
 
@@ -640,28 +1169,27 @@ def _clean_sections(
     list[dict],
     dict,
 ]:
-    """
-    핵심 cleaner.
 
-    References가 시작되면 이후는 clean body에서 제외.
-
-    Acknowledgments/Funding/Conflict 등은
-    해당 section만 제거한다.
-    """
-
-    clean_sections: list[
-        dict
-    ] = []
+    clean_sections = []
 
     removed_sections = []
 
     references_removed = False
+
+    removed_blocks = 0
 
     original_section_count = len(
         sections
     )
 
     for section in sections:
+
+        if not isinstance(
+            section,
+            dict,
+        ):
+
+            continue
 
         heading = (
             _normalize_text(
@@ -673,11 +1201,21 @@ def _clean_sections(
         )
 
         # ====================================================
-        # References boundary
+        # References Boundary
+        # ====================================================
+        #
+        # 논문 후단의 bibliography가 시작되면
+        # 그 뒤 전체를 clean body에서 제외.
         # ====================================================
 
-        if _is_reference_heading(
-            heading
+        if (
+            section.get(
+                "in_bibliography",
+                False,
+            )
+            or _is_reference_heading(
+                heading
+            )
         ):
 
             references_removed = True
@@ -687,18 +1225,16 @@ def _clean_sections(
                     "heading": (
                         heading
                     ),
-
                     "reason": (
                         "references_boundary"
                     ),
                 }
             )
 
-            # bibliography 뒤는 V1 clean body에서 제외
             break
 
         # ====================================================
-        # Non-body sections
+        # Other back-matter
         # ====================================================
 
         if _should_remove_section(
@@ -710,7 +1246,6 @@ def _clean_sections(
                     "heading": (
                         heading
                     ),
-
                     "reason": (
                         "non_body_section"
                     ),
@@ -722,7 +1257,7 @@ def _clean_sections(
         blocks = (
             section.get(
                 "blocks",
-                []
+                [],
             )
         )
 
@@ -733,9 +1268,7 @@ def _clean_sections(
 
             continue
 
-        clean_blocks: list[
-            dict
-        ] = []
+        clean_blocks = []
 
         for block in blocks:
 
@@ -743,6 +1276,8 @@ def _clean_sections(
                 block,
                 dict,
             ):
+
+                removed_blocks += 1
 
                 continue
 
@@ -752,17 +1287,29 @@ def _clean_sections(
                 )
             )
 
-            if (
-                cleaned
-                is not None
-            ):
+            if cleaned is None:
 
-                clean_blocks.append(
-                    cleaned
-                )
+                removed_blocks += 1
+
+                continue
+
+            clean_blocks.append(
+                cleaned
+            )
+
+        before_dedup = len(
+            clean_blocks
+        )
 
         clean_blocks = (
             _remove_consecutive_duplicates(
+                clean_blocks
+            )
+        )
+
+        removed_blocks += (
+            before_dedup
+            - len(
                 clean_blocks
             )
         )
@@ -777,14 +1324,12 @@ def _clean_sections(
                     heading
                     or "Document Body"
                 ),
-
                 "level": (
                     section.get(
                         "level",
                         2,
                     )
                 ),
-
                 "blocks": (
                     clean_blocks
                 ),
@@ -795,15 +1340,17 @@ def _clean_sections(
         "original_section_count": (
             original_section_count
         ),
-
-        "clean_section_count": len(
-            clean_sections
+        "clean_section_count": (
+            len(
+                clean_sections
+            )
         ),
-
         "references_removed": (
             references_removed
         ),
-
+        "removed_blocks": (
+            removed_blocks
+        ),
         "removed_sections": (
             removed_sections
         ),
@@ -816,18 +1363,17 @@ def _clean_sections(
 
 
 # ============================================================
-# Renderer
+# Render Clean Content
 # ============================================================
 
 def _render_clean_content(
+    *,
     title: str,
     abstract: str,
     sections: list[dict],
 ) -> str:
 
-    output: list[
-        str
-    ] = []
+    output = []
 
     # ========================================================
     # Title
@@ -937,7 +1483,7 @@ def _render_clean_content(
             [],
         ):
 
-            block_type = (
+            block_type = str(
                 block.get(
                     "type",
                     "paragraph",
@@ -1034,16 +1580,30 @@ def _alpha_ratio(
 
         return 0.0
 
-    alpha_count = sum(
-        1
+    characters = [
+        char
         for char in text
-        if char.isalpha()
+        if not char.isspace()
+    ]
+
+    if not characters:
+
+        return 0.0
+
+    alphabetic = sum(
+        1
+        for char in characters
+        if (
+            "a"
+            <= char.lower()
+            <= "z"
+        )
     )
 
     return round(
-        alpha_count
+        alphabetic
         / len(
-            text
+            characters
         ),
         4,
     )
@@ -1074,7 +1634,7 @@ def _percentage_reduction(
 
 
 # ============================================================
-# SHA-256
+# Content Hash
 # ============================================================
 
 def _content_hash(
@@ -1089,7 +1649,7 @@ def _content_hash(
 
 
 # ============================================================
-# Quality
+# Quality Gate
 # ============================================================
 
 def _evaluate_quality(
@@ -1178,23 +1738,18 @@ def _evaluate_quality(
         "passed": (
             passed
         ),
-
         "reasons": (
             reasons
         ),
-
         "char_count": (
             char_count
         ),
-
         "word_count": (
             word_count
         ),
-
         "alpha_ratio": (
             alpha_ratio
         ),
-
         "section_count": (
             section_count
         ),
@@ -1244,6 +1799,13 @@ def clean_document(
         )
     )
 
+    if not raw_content:
+
+        raise RuntimeError(
+            f"raw_content.txt empty: "
+            f"{raw_path}"
+        )
+
     title = (
         _normalize_text(
             parsed.get(
@@ -1286,8 +1848,10 @@ def clean_document(
     (
         clean_sections,
         cleaning_info,
-    ) = _clean_sections(
-        sections
+    ) = (
+        _clean_sections(
+            sections
+        )
     )
 
     # ========================================================
@@ -1296,9 +1860,15 @@ def clean_document(
 
     clean_content = (
         _render_clean_content(
-            title=title,
-            abstract=abstract,
-            sections=clean_sections,
+            title=(
+                title
+            ),
+            abstract=(
+                abstract
+            ),
+            sections=(
+                clean_sections
+            ),
         )
     )
 
@@ -1350,36 +1920,33 @@ def clean_document(
             "char_count": (
                 before_chars
             ),
-
             "word_count": (
                 before_words
             ),
-
-            "section_count": len(
-                sections
+            "section_count": (
+                len(
+                    sections
+                )
             ),
         },
-
         "after": {
             "char_count": (
                 after_chars
             ),
-
             "word_count": (
                 after_words
             ),
-
-            "section_count": len(
-                clean_sections
+            "section_count": (
+                len(
+                    clean_sections
+                )
             ),
-
             "alpha_ratio": (
                 quality[
                     "alpha_ratio"
                 ]
             ),
         },
-
         "reduction": {
             "char_percent": (
                 _percentage_reduction(
@@ -1387,7 +1954,6 @@ def clean_document(
                     after_chars,
                 )
             ),
-
             "word_percent": (
                 _percentage_reduction(
                     before_words,
@@ -1411,59 +1977,57 @@ def clean_document(
 
         source_info = {}
 
+    source_id = str(
+        source_info.get(
+            "source_id"
+        )
+        or paper_dir.name
+    )
+
+    topic_axis = str(
+        source_info.get(
+            "topic_axis"
+        )
+        or paper_dir.parent.name
+    )
+
     result = {
-        "source": "ntrs",
-
+        "source": (
+            "ntrs"
+        ),
         "source_id": (
-            source_info.get(
-                "source_id"
-            )
-            or paper_dir.name
+            source_id
         ),
-
         "topic_axis": (
-            source_info.get(
-                "topic_axis"
-            )
-            or paper_dir.parent.name
+            topic_axis
         ),
-
         "title": (
             title
         ),
-
         "abstract": (
             abstract
         ),
-
         "normalization_version": (
             NORMALIZATION_VERSION
         ),
-
         "sections": (
             clean_sections
         ),
-
         "clean_content": (
             clean_content
         ),
-
         "content_hash": (
             digest
         ),
-
         "quality": (
             quality
         ),
-
         "statistics": (
             statistics
         ),
-
         "cleaning": (
             cleaning_info
         ),
-
         "source_info": (
             source_info
         ),
@@ -1473,7 +2037,7 @@ def clean_document(
 
 
 # ============================================================
-# Save Document
+# Save Clean Document
 # ============================================================
 
 def _save_cleaned_document(
@@ -1498,37 +2062,61 @@ def _save_cleaned_document(
         encoding="utf-8",
     )
 
-    json_payload = dict(
-        cleaned
-    )
-
-    # clean_content는 txt에도 있으므로
-    # JSON에도 남겨 loader가 단독으로 읽을 수 있게 한다.
     _save_json(
         json_path,
-        json_payload,
+        cleaned,
     )
 
 
 # ============================================================
-# Local Content-hash Dedup
+# Remove Stale Output After Failure
+# ============================================================
+
+def _remove_stale_outputs(
+    paper_dir: Path,
+) -> None:
+
+    for filename in (
+        "clean_content.txt",
+        "cleaned_document.json",
+    ):
+
+        path = (
+            paper_dir
+            / filename
+        )
+
+        if not path.exists():
+
+            continue
+
+        try:
+
+            path.unlink()
+
+        except OSError:
+
+            pass
+
+
+# ============================================================
+# Local Content Hash Duplicate Check
 # ============================================================
 
 def _mark_local_duplicates(
     results: list[dict],
 ) -> int:
     """
-    NTRS 15편 내부 hash 중복 검사.
+    Frozen 신규 NTRS 35편 내부의
+    clean_content SHA-256 중복 검사.
 
-    DB 적재 단계에서는 기존 arXiv 15편의 hash와도
-    다시 비교한다.
-
-    여기서는 NTRS 내부 duplicate만 검사.
+    기존 DB arXiv/NTRS 문서와의 비교는
+    DB Loader preflight에서 다시 수행한다.
     """
 
     seen: dict[
         str,
-        dict
+        dict,
     ] = {}
 
     duplicate_count = 0
@@ -1543,6 +2131,10 @@ def _mark_local_duplicates(
         ):
 
             continue
+
+        result[
+            "duplicate"
+        ] = False
 
         content_hash = (
             result.get(
@@ -1562,10 +2154,6 @@ def _mark_local_duplicates(
             seen[
                 content_hash
             ] = result
-
-            result[
-                "duplicate"
-            ] = False
 
             continue
 
@@ -1589,7 +2177,6 @@ def _mark_local_duplicates(
                     "source_id"
                 )
             ),
-
             "topic_axis": (
                 original.get(
                     "topic_axis"
@@ -1605,8 +2192,17 @@ def _mark_local_duplicates(
 # ============================================================
 
 def _save_report(
+    *,
     results: list[dict],
     duplicate_count: int,
+    axis_success: dict[
+        str,
+        int,
+    ],
+    axis_quality_pass: dict[
+        str,
+        int,
+    ],
 ) -> None:
 
     REPORT_DIR.mkdir(
@@ -1616,7 +2212,8 @@ def _save_report(
 
     success = sum(
         1
-        for item in results
+        for item
+        in results
         if (
             item.get(
                 "status"
@@ -1634,7 +2231,8 @@ def _save_report(
 
     quality_pass = sum(
         1
-        for item in results
+        for item
+        in results
         if (
             item.get(
                 "status"
@@ -1652,11 +2250,15 @@ def _save_report(
     )
 
     words_before = sum(
-        item.get(
-            "words_before",
-            0,
+        int(
+            item.get(
+                "words_before",
+                0,
+            )
+            or 0
         )
-        for item in results
+        for item
+        in results
         if (
             item.get(
                 "status"
@@ -1666,11 +2268,15 @@ def _save_report(
     )
 
     words_after = sum(
-        item.get(
-            "words_after",
-            0,
+        int(
+            item.get(
+                "words_after",
+                0,
+            )
+            or 0
         )
-        for item in results
+        for item
+        in results
         if (
             item.get(
                 "status"
@@ -1680,11 +2286,15 @@ def _save_report(
     )
 
     chars_before = sum(
-        item.get(
-            "chars_before",
-            0,
+        int(
+            item.get(
+                "chars_before",
+                0,
+            )
+            or 0
         )
-        for item in results
+        for item
+        in results
         if (
             item.get(
                 "status"
@@ -1694,11 +2304,15 @@ def _save_report(
     )
 
     chars_after = sum(
-        item.get(
-            "chars_after",
-            0,
+        int(
+            item.get(
+                "chars_after",
+                0,
+            )
+            or 0
         )
-        for item in results
+        for item
+        in results
         if (
             item.get(
                 "status"
@@ -1708,66 +2322,87 @@ def _save_report(
     )
 
     payload = {
-        "source": "ntrs",
-
+        "cleaner_version": (
+            CLEANER_VERSION
+        ),
+        "source": (
+            "ntrs"
+        ),
+        "selection_file": (
+            str(
+                SELECTION_FILE
+            )
+        ),
         "normalization_version": (
             NORMALIZATION_VERSION
         ),
-
-        "total": len(
-            results
+        "expected_total": (
+            EXPECTED_TOTAL
         ),
-
+        "selected": (
+            len(
+                results
+            )
+        ),
         "success": (
             success
         ),
-
         "failed": (
             failed
         ),
-
         "quality_pass": (
             quality_pass
         ),
-
         "quality_fail": (
             quality_fail
         ),
-
-        "duplicate_count": (
+        "duplicate_hashes": (
             duplicate_count
         ),
-
+        "axis_success": (
+            axis_success
+        ),
+        "axis_quality_pass": (
+            axis_quality_pass
+        ),
         "words_before": (
             words_before
         ),
-
         "words_after": (
             words_after
         ),
-
         "chars_before": (
             chars_before
         ),
-
         "chars_after": (
             chars_after
         ),
-
         "word_reduction_percent": (
             _percentage_reduction(
                 words_before,
                 words_after,
             )
         ),
-
         "char_reduction_percent": (
             _percentage_reduction(
                 chars_before,
                 chars_after,
             )
         ),
-
+        "quality_thresholds": {
+            "min_char_count": (
+                MIN_CHAR_COUNT
+            ),
+            "min_word_count": (
+                MIN_WORD_COUNT
+            ),
+            "min_alpha_ratio": (
+                MIN_ALPHA_RATIO
+            ),
+            "min_section_count": (
+                MIN_SECTION_COUNT
+            ),
+        },
         "documents": (
             results
         ),
@@ -1780,80 +2415,162 @@ def _save_report(
 
 
 # ============================================================
-# Find Parsed Documents
-# ============================================================
-
-def _find_documents() -> list[
-    Path
-]:
-
-    if not RESOLVED_ROOT.exists():
-
-        raise FileNotFoundError(
-            f"NTRS resolved root "
-            f"not found: "
-            f"{RESOLVED_ROOT}"
-        )
-
-    return sorted(
-        RESOLVED_ROOT.glob(
-            "*/*/parsed_document.json"
-        )
-    )
-
-
-# ============================================================
 # Main
 # ============================================================
 
 def main():
 
     print()
-    print("=" * 70)
+    print("=" * 78)
 
     print(
-        "TEAM B - NASA NTRS Cleaner"
+        "TEAM B - NASA NTRS "
+        "Core-100 Cleaner"
     )
 
-    print("=" * 70)
+    print("=" * 78)
 
-    documents = (
-        _find_documents()
+    print(
+        f"Cleaner version : "
+        f"{CLEANER_VERSION}"
     )
 
     print(
-        f"Input root : "
+        f"Selection file  : "
+        f"{SELECTION_FILE}"
+    )
+
+    print(
+        f"Input root      : "
         f"{RESOLVED_ROOT}"
     )
 
     print(
-        f"Documents  : "
-        f"{len(documents)}"
+        f"Report          : "
+        f"{REPORT_FILE}"
     )
 
     print(
-        f"Version    : "
+        f"Normalization   : "
         f"{NORMALIZATION_VERSION}"
     )
 
-    if not documents:
+    print()
 
-        print()
-        print(
-            "[STOP] No parsed_document.json "
-            "files found."
+    print(
+        "Quality thresholds:"
+    )
+
+    print(
+        f"  chars    >= "
+        f"{MIN_CHAR_COUNT}"
+    )
+
+    print(
+        f"  words    >= "
+        f"{MIN_WORD_COUNT}"
+    )
+
+    print(
+        f"  alpha    >= "
+        f"{MIN_ALPHA_RATIO}"
+    )
+
+    print(
+        f"  sections >= "
+        f"{MIN_SECTION_COUNT}"
+    )
+
+    # ========================================================
+    # Frozen Selection
+    # ========================================================
+
+    selection = (
+        _load_selection()
+    )
+
+    print()
+    print(
+        "Frozen selection:"
+    )
+
+    for (
+        topic_axis,
+        expected_count,
+    ) in EXPECTED_COUNTS.items():
+
+        actual = len(
+            selection[
+                topic_axis
+            ]
         )
 
-        return
+        print(
+            f"  "
+            f"{topic_axis:22} : "
+            f"{actual} / "
+            f"{expected_count}"
+        )
+
+    print(
+        f"  "
+        f"{'TOTAL':22} : "
+        f"{sum(len(x) for x in selection.values())}"
+    )
+
+    # ========================================================
+    # Full preflight BEFORE mutation
+    # ========================================================
+
+    print()
+    print(
+        "[PREFLIGHT] Checking all "
+        "35 parsed documents..."
+    )
+
+    selected_documents = (
+        _build_selected_documents(
+            selection
+        )
+    )
+
+    print(
+        f"[PREFLIGHT] PASS: "
+        f"{len(selected_documents)} / "
+        f"{EXPECTED_TOTAL}"
+    )
+
+    # ========================================================
+    # Counters
+    # ========================================================
 
     results = []
 
+    axis_success = {
+        topic_axis: 0
+        for topic_axis
+        in EXPECTED_COUNTS
+    }
+
+    axis_quality_pass = {
+        topic_axis: 0
+        for topic_axis
+        in EXPECTED_COUNTS
+    }
+
     # ========================================================
-    # Clean
+    # Clean Frozen 35 Only
     # ========================================================
 
-    for index, parsed_path in enumerate(
-        documents,
+    for (
+        index,
+        (
+            topic_axis,
+            source_id,
+            parsed_path,
+        ),
+    ) in enumerate(
+        selected_documents,
         start=1,
     ):
 
@@ -1861,22 +2578,12 @@ def main():
             parsed_path.parent
         )
 
-        source_id = (
-            paper_dir.name
-        )
-
-        topic_axis = (
-            paper_dir.parent.name
-        )
-
         print()
-        print(
-            "-" * 70
-        )
+        print("-" * 78)
 
         print(
             f"[{index}/"
-            f"{len(documents)}]"
+            f"{EXPECTED_TOTAL}]"
         )
 
         print(
@@ -1889,9 +2596,7 @@ def main():
             f"{source_id}"
         )
 
-        print(
-            "-" * 70
-        )
+        print("-" * 78)
 
         try:
 
@@ -1900,6 +2605,50 @@ def main():
                     parsed_path
                 )
             )
+
+            # =================================================
+            # Identity must remain frozen
+            # =================================================
+
+            cleaned_source_id = str(
+                cleaned.get(
+                    "source_id",
+                    "",
+                )
+            ).strip()
+
+            cleaned_axis = str(
+                cleaned.get(
+                    "topic_axis",
+                    "",
+                )
+            ).strip()
+
+            if (
+                cleaned_source_id
+                != source_id
+            ):
+
+                raise RuntimeError(
+                    "Cleaner source_id mismatch: "
+                    f"{cleaned_source_id} "
+                    f"!= {source_id}"
+                )
+
+            if (
+                cleaned_axis
+                != topic_axis
+            ):
+
+                raise RuntimeError(
+                    "Cleaner topic_axis mismatch: "
+                    f"{cleaned_axis} "
+                    f"!= {topic_axis}"
+                )
+
+            # =================================================
+            # Save
+            # =================================================
 
             _save_cleaned_document(
                 paper_dir,
@@ -1917,6 +2666,22 @@ def main():
                     "statistics"
                 ]
             )
+
+            axis_success[
+                topic_axis
+            ] += 1
+
+            if quality[
+                "passed"
+            ]:
+
+                axis_quality_pass[
+                    topic_axis
+                ] += 1
+
+            # =================================================
+            # Log
+            # =================================================
 
             print(
                 f"[OK] Title       : "
@@ -1949,6 +2714,12 @@ def main():
                 f"{quality['alpha_ratio']}"
             )
 
+            print(
+                f"[OK] Reduction   : "
+                f"{stats['reduction']['word_percent']}%"
+                f" words"
+            )
+
             if quality[
                 "passed"
             ]:
@@ -1978,48 +2749,42 @@ def main():
                 f"{paper_dir / 'clean_content.txt'}"
             )
 
+            print(
+                f"[SAVE] "
+                f"{paper_dir / 'cleaned_document.json'}"
+            )
+
             results.append(
                 {
                     "status": (
                         "success"
                     ),
-
                     "source_id": (
-                        cleaned[
-                            "source_id"
-                        ]
+                        source_id
                     ),
-
                     "topic_axis": (
-                        cleaned[
-                            "topic_axis"
-                        ]
+                        topic_axis
                     ),
-
                     "title": (
                         cleaned[
                             "title"
                         ]
                     ),
-
                     "quality_pass": (
                         quality[
                             "passed"
                         ]
                     ),
-
                     "quality_reasons": (
                         quality[
                             "reasons"
                         ]
                     ),
-
                     "content_hash": (
                         cleaned[
                             "content_hash"
                         ]
                     ),
-
                     "words_before": (
                         stats[
                             "before"
@@ -2027,7 +2792,6 @@ def main():
                             "word_count"
                         ]
                     ),
-
                     "words_after": (
                         stats[
                             "after"
@@ -2035,7 +2799,6 @@ def main():
                             "word_count"
                         ]
                     ),
-
                     "chars_before": (
                         stats[
                             "before"
@@ -2043,7 +2806,6 @@ def main():
                             "char_count"
                         ]
                     ),
-
                     "chars_after": (
                         stats[
                             "after"
@@ -2051,7 +2813,6 @@ def main():
                             "char_count"
                         ]
                     ),
-
                     "sections_before": (
                         stats[
                             "before"
@@ -2059,7 +2820,6 @@ def main():
                             "section_count"
                         ]
                     ),
-
                     "sections_after": (
                         stats[
                             "after"
@@ -2067,13 +2827,11 @@ def main():
                             "section_count"
                         ]
                     ),
-
                     "alpha_ratio": (
                         quality[
                             "alpha_ratio"
                         ]
                     ),
-
                     "references_removed": (
                         cleaned[
                             "cleaning"
@@ -2081,12 +2839,25 @@ def main():
                             "references_removed"
                         ]
                     ),
-
-                    "duplicate": False,
+                    "removed_blocks": (
+                        cleaned[
+                            "cleaning"
+                        ][
+                            "removed_blocks"
+                        ]
+                    ),
+                    "duplicate": (
+                        False
+                    ),
                 }
             )
 
         except Exception as exc:
+
+            # stale output 방지
+            _remove_stale_outputs(
+                paper_dir
+            )
 
             print(
                 f"[FAILED] "
@@ -2099,15 +2870,12 @@ def main():
                     "status": (
                         "failed"
                     ),
-
                     "source_id": (
                         source_id
                     ),
-
                     "topic_axis": (
                         topic_axis
                     ),
-
                     "error": (
                         f"{type(exc).__name__}: "
                         f"{exc}"
@@ -2116,7 +2884,7 @@ def main():
             )
 
     # ========================================================
-    # Local Dedup
+    # Local Duplicate QA
     # ========================================================
 
     duplicate_count = (
@@ -2126,17 +2894,13 @@ def main():
     )
 
     # ========================================================
-    # Report
+    # Summary Counts
     # ========================================================
-
-    _save_report(
-        results,
-        duplicate_count,
-    )
 
     success = sum(
         1
-        for item in results
+        for item
+        in results
         if (
             item.get(
                 "status"
@@ -2154,7 +2918,8 @@ def main():
 
     quality_pass = sum(
         1
-        for item in results
+        for item
+        in results
         if (
             item.get(
                 "status"
@@ -2172,11 +2937,15 @@ def main():
     )
 
     words_before = sum(
-        item.get(
-            "words_before",
-            0,
+        int(
+            item.get(
+                "words_before",
+                0,
+            )
+            or 0
         )
-        for item in results
+        for item
+        in results
         if (
             item.get(
                 "status"
@@ -2186,11 +2955,15 @@ def main():
     )
 
     words_after = sum(
-        item.get(
-            "words_after",
-            0,
+        int(
+            item.get(
+                "words_after",
+                0,
+            )
+            or 0
         )
-        for item in results
+        for item
+        in results
         if (
             item.get(
                 "status"
@@ -2199,32 +2972,91 @@ def main():
         )
     )
 
-    reduction = (
+    chars_before = sum(
+        int(
+            item.get(
+                "chars_before",
+                0,
+            )
+            or 0
+        )
+        for item
+        in results
+        if (
+            item.get(
+                "status"
+            )
+            == "success"
+        )
+    )
+
+    chars_after = sum(
+        int(
+            item.get(
+                "chars_after",
+                0,
+            )
+            or 0
+        )
+        for item
+        in results
+        if (
+            item.get(
+                "status"
+            )
+            == "success"
+        )
+    )
+
+    word_reduction = (
         _percentage_reduction(
             words_before,
             words_after,
         )
     )
 
+    char_reduction = (
+        _percentage_reduction(
+            chars_before,
+            chars_after,
+        )
+    )
+
     # ========================================================
-    # Summary
+    # Report
+    # ========================================================
+
+    _save_report(
+        results=(
+            results
+        ),
+        duplicate_count=(
+            duplicate_count
+        ),
+        axis_success=(
+            axis_success
+        ),
+        axis_quality_pass=(
+            axis_quality_pass
+        ),
+    )
+
+    # ========================================================
+    # Console Summary
     # ========================================================
 
     print()
-    print(
-        "=" * 70
-    )
+    print("=" * 78)
 
     print(
-        "NTRS CLEANING COMPLETED"
+        "NTRS CORE-100 "
+        "CLEANING COMPLETED"
     )
 
-    print(
-        "=" * 70
-    )
+    print("=" * 78)
 
     print(
-        f"Total          : "
+        f"Selected       : "
         f"{len(results)}"
     )
 
@@ -2253,6 +3085,28 @@ def main():
         f"{duplicate_count}"
     )
 
+    print()
+
+    print(
+        "Axis QA:"
+    )
+
+    for (
+        topic_axis,
+        expected_count,
+    ) in EXPECTED_COUNTS.items():
+
+        print(
+            f"  "
+            f"{topic_axis:22} : "
+            f"{axis_success[topic_axis]} / "
+            f"{expected_count} "
+            f"(quality "
+            f"{axis_quality_pass[topic_axis]})"
+        )
+
+    print()
+
     print(
         f"Words before   : "
         f"{words_before}"
@@ -2265,16 +3119,182 @@ def main():
 
     print(
         f"Word reduction : "
-        f"{reduction}%"
+        f"{word_reduction}%"
     )
+
+    print()
+
+    print(
+        f"Chars before   : "
+        f"{chars_before}"
+    )
+
+    print(
+        f"Chars after    : "
+        f"{chars_after}"
+    )
+
+    print(
+        f"Char reduction : "
+        f"{char_reduction}%"
+    )
+
+    print()
 
     print(
         f"Report         : "
         f"{REPORT_FILE}"
     )
 
+    print("=" * 78)
+
+    # ========================================================
+    # Hard Gate
+    # ========================================================
+
+    all_axis_success = all(
+        axis_success[
+            topic_axis
+        ]
+        == expected_count
+        for (
+            topic_axis,
+            expected_count,
+        )
+        in EXPECTED_COUNTS.items()
+    )
+
+    all_axis_quality = all(
+        axis_quality_pass[
+            topic_axis
+        ]
+        == expected_count
+        for (
+            topic_axis,
+            expected_count,
+        )
+        in EXPECTED_COUNTS.items()
+    )
+
+    if (
+        len(
+            results
+        )
+        == EXPECTED_TOTAL
+        and success
+        == EXPECTED_TOTAL
+        and failed
+        == 0
+        and quality_pass
+        == EXPECTED_TOTAL
+        and quality_fail
+        == 0
+        and duplicate_count
+        == 0
+        and all_axis_success
+        and all_axis_quality
+    ):
+
+        print(
+            "[PASS] All 35 selected "
+            "NTRS papers passed cleaning."
+        )
+
+        print()
+
+        print(
+            "NEXT:"
+        )
+
+        print(
+            "Run the NTRS Core-100 "
+            "DB Loader."
+        )
+
+        print("=" * 78)
+
+        return
+
+    # ========================================================
+    # Failed Gate
+    # ========================================================
+
     print(
-        "=" * 70
+        "[CHECK] Cleaner Gate failed."
+    )
+
+    print()
+
+    if quality_fail > 0:
+
+        print(
+            "Quality failures:"
+        )
+
+        for item in results:
+
+            if (
+                item.get(
+                    "status"
+                )
+                == "success"
+                and not item.get(
+                    "quality_pass"
+                )
+            ):
+
+                print(
+                    f"  - "
+                    f"{item['topic_axis']} / "
+                    f"{item['source_id']}"
+                )
+
+                print(
+                    f"    reasons: "
+                    f"{item.get('quality_reasons')}"
+                )
+
+    if duplicate_count > 0:
+
+        print()
+
+        print(
+            "Duplicate hashes:"
+        )
+
+        for item in results:
+
+            if item.get(
+                "duplicate"
+            ):
+
+                print(
+                    f"  - "
+                    f"{item.get('source_id')} "
+                    f"duplicates "
+                    f"{item.get('duplicate_of')}"
+                )
+
+    print()
+    print(
+        "Do NOT run the DB Loader yet."
+    )
+
+    print(
+        "Repair only the failed "
+        "document(s), then rerun Cleaner."
+    )
+
+    print("=" * 78)
+
+    raise RuntimeError(
+        "NTRS Core-100 Cleaner "
+        f"Gate failed: "
+        f"quality "
+        f"{quality_pass}/"
+        f"{EXPECTED_TOTAL}, "
+        f"duplicates="
+        f"{duplicate_count}."
     )
 
 

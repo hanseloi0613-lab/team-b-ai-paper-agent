@@ -1,14 +1,94 @@
 import json
 import re
 import unicodedata
+from collections import Counter
 from pathlib import Path
+
+from pypdf import PdfReader
 
 from app.config import PROJECT_ROOT
 
 
 # ============================================================
+# TEAM B - NASA NTRS Core-100 Batch Parser
+# ============================================================
+#
+# Frozen Selection:
+#
+#   rover_autonomy       12
+#   onboard_ai           12
+#   satellite_autonomy   11
+#   ------------------------
+#   TOTAL                35
+#
+#
+# Resolver result:
+#
+#   TXT                  26
+#   PDF                   9
+#   ------------------------
+#   TOTAL                35
+#
+#
+# 이 Parser는:
+#
+#   ntrs_core100_selected.json
+#               ↓
+#   선택된 35편 ONLY
+#               ↓
+#       resolution.json
+#          ↙         ↘
+#       TXT           PDF
+#        ↓             ↓
+#   TXT parser     PDF parser
+#          ↘         ↙
+#       raw_content.txt
+#       parsed_document.json
+#               ↓
+#           35 / 35 QA
+#
+#
+# 중요:
+#
+# - 기존 Pilot 15편은 건드리지 않는다.
+# - ntrs_resolved 전체를 glob하지 않는다.
+# - frozen selection manifest만 canonical source로 사용한다.
+# - PDF는 pypdf를 사용한다.
+# - OCR은 사용하지 않는다.
+# - cleaning은 여기서 하지 않는다.
+# - References 제거는 Cleaner에서 한다.
+# ============================================================
+
+
+PARSER_VERSION = "core100_v1"
+
+
+# ============================================================
+# Expected Selection
+# ============================================================
+
+EXPECTED_COUNTS = {
+    "rover_autonomy": 12,
+    "onboard_ai": 12,
+    "satellite_autonomy": 11,
+}
+
+EXPECTED_TOTAL = sum(
+    EXPECTED_COUNTS.values()
+)
+
+
+# ============================================================
 # Paths
 # ============================================================
+
+SELECTION_FILE = (
+    PROJECT_ROOT
+    / "data"
+    / "selections"
+    / "ntrs_core100_selected.json"
+)
+
 
 RESOLVED_ROOT = (
     PROJECT_ROOT
@@ -17,28 +97,40 @@ RESOLVED_ROOT = (
     / "ntrs_resolved"
 )
 
+
 REPORT_DIR = (
     PROJECT_ROOT
     / "data"
     / "reports"
 )
 
+
 REPORT_FILE = (
     REPORT_DIR
-    / "ntrs_txt_parsing_report.json"
+    / "ntrs_core100_parsing_report.json"
 )
 
 
 # ============================================================
-# Heading Vocabulary
+# Parser Minimum Gate
 # ============================================================
 #
-# NASA 기술보고서 / conference paper에서 자주 나오는
-# section heading.
+# 이것은 Cleaner quality threshold가 아니다.
 #
-# 이것만 사용하는 것은 아니고,
-# 아래의 numbered heading / ALL CAPS heading도 인식한다.
+# 여기서는:
+# "parser가 실질적인 text를 만들어냈는가?"
+# 만 확인한다.
 #
+# 최종 품질 기준은 Cleaner에서 별도로 적용한다.
+# ============================================================
+
+MIN_PARSED_CHARS = 500
+
+MIN_PARSED_WORDS = 80
+
+
+# ============================================================
+# Heading Vocabulary
 # ============================================================
 
 KNOWN_HEADINGS = {
@@ -46,6 +138,7 @@ KNOWN_HEADINGS = {
     "introduction",
     "background",
     "related work",
+    "related works",
     "motivation",
     "overview",
     "system overview",
@@ -59,6 +152,9 @@ KNOWN_HEADINGS = {
     "algorithm",
     "algorithms",
     "implementation",
+    "design",
+    "system design",
+    "problem formulation",
     "experimental setup",
     "experiment",
     "experiments",
@@ -67,6 +163,7 @@ KNOWN_HEADINGS = {
     "results",
     "discussion",
     "results and discussion",
+    "limitations",
     "conclusion",
     "conclusions",
     "concluding remarks",
@@ -94,7 +191,9 @@ def _load_json(
 
     if not path.exists():
 
-        return {}
+        raise FileNotFoundError(
+            f"JSON file not found: {path}"
+        )
 
     try:
 
@@ -107,9 +206,11 @@ def _load_json(
     except (
         json.JSONDecodeError,
         UnicodeDecodeError,
-    ):
+    ) as exc:
 
-        return {}
+        raise RuntimeError(
+            f"Invalid JSON file: {path}"
+        ) from exc
 
 
 def _save_json(
@@ -134,74 +235,232 @@ def _save_json(
 
 
 # ============================================================
+# Frozen Selection
+# ============================================================
+
+def _load_selection() -> dict[
+    str,
+    list[str],
+]:
+
+    payload = (
+        _load_json(
+            SELECTION_FILE
+        )
+    )
+
+    # --------------------------------------------------------
+    # Version
+    # --------------------------------------------------------
+
+    version = (
+        payload.get(
+            "selection_version"
+        )
+    )
+
+    if (
+        version is not None
+        and version != PARSER_VERSION
+    ):
+
+        raise RuntimeError(
+            "Selection version mismatch.\n"
+            f"Expected: {PARSER_VERSION}\n"
+            f"Found   : {version}"
+        )
+
+    # --------------------------------------------------------
+    # Source
+    # --------------------------------------------------------
+
+    source = str(
+        payload.get(
+            "source",
+            "",
+        )
+    ).lower()
+
+    if (
+        source
+        and source != "ntrs"
+    ):
+
+        raise RuntimeError(
+            f"Unexpected selection source: "
+            f"{source}"
+        )
+
+    # --------------------------------------------------------
+    # Canonical IDs
+    # --------------------------------------------------------
+
+    selected = (
+        payload.get(
+            "selected_documents"
+        )
+    )
+
+    if not isinstance(
+        selected,
+        dict,
+    ):
+
+        raise RuntimeError(
+            "selected_documents missing "
+            "from ntrs_core100_selected.json."
+        )
+
+    result = {}
+
+    seen_ids = set()
+
+    for (
+        topic_axis,
+        expected_count,
+    ) in EXPECTED_COUNTS.items():
+
+        source_ids = (
+            selected.get(
+                topic_axis
+            )
+        )
+
+        if not isinstance(
+            source_ids,
+            list,
+        ):
+
+            raise RuntimeError(
+                f"{topic_axis}: "
+                "selected_documents is not a list."
+            )
+
+        normalized = []
+
+        for source_id in source_ids:
+
+            source_id = str(
+                source_id
+            ).strip()
+
+            if not source_id:
+
+                raise RuntimeError(
+                    f"{topic_axis}: "
+                    "empty source_id."
+                )
+
+            if source_id in seen_ids:
+
+                raise RuntimeError(
+                    "Cross-axis duplicate "
+                    f"NTRS ID: {source_id}"
+                )
+
+            seen_ids.add(
+                source_id
+            )
+
+            normalized.append(
+                source_id
+            )
+
+        if (
+            len(normalized)
+            != expected_count
+        ):
+
+            raise RuntimeError(
+                f"{topic_axis}: "
+                f"expected {expected_count}, "
+                f"found {len(normalized)}."
+            )
+
+        result[
+            topic_axis
+        ] = normalized
+
+    total = sum(
+        len(source_ids)
+        for source_ids
+        in result.values()
+    )
+
+    if total != EXPECTED_TOTAL:
+
+        raise RuntimeError(
+            f"Expected {EXPECTED_TOTAL} "
+            f"selected documents, "
+            f"found {total}."
+        )
+
+    return result
+
+
+# ============================================================
 # Basic Text Normalization
 # ============================================================
 
 def _normalize_text(
     text: str,
 ) -> str:
-    """
-    parser 단계에서는 과도하게 clean하지 않는다.
-
-    목적:
-    - encoding/control character 정리
-    - 줄바꿈 통일
-    - NASA TXT의 기본 구조 보존
-
-    bibliography 제거 같은 실제 cleaning은
-    cleaner.py 단계에서 수행한다.
-    """
 
     text = unicodedata.normalize(
         "NFC",
         text,
     )
 
-    text = text.replace(
-        "\x00",
-        "",
+    text = (
+        text
+        .replace(
+            "\x00",
+            "",
+        )
+        .replace(
+            "\ufeff",
+            "",
+        )
+        .replace(
+            "\xa0",
+            " ",
+        )
+        .replace(
+            "\u00ad",
+            "",
+        )
+        .replace(
+            "\ufb01",
+            "fi",
+        )
+        .replace(
+            "\ufb02",
+            "fl",
+        )
+        .replace(
+            "\r\n",
+            "\n",
+        )
+        .replace(
+            "\r",
+            "\n",
+        )
+        .replace(
+            "\f",
+            "\n\n",
+        )
+        .replace(
+            "\t",
+            " ",
+        )
     )
 
-    text = text.replace(
-        "\ufeff",
-        "",
-    )
-
-    text = text.replace(
-        "\xa0",
-        " ",
-    )
-
-    text = text.replace(
-        "\r\n",
-        "\n",
-    )
-
-    text = text.replace(
-        "\r",
-        "\n",
-    )
-
-    # form feed = PDF/page boundary 성격
-    text = text.replace(
-        "\f",
-        "\n\n",
-    )
-
-    # tab -> space
-    text = text.replace(
-        "\t",
-        " ",
-    )
-
-    # line 안에서만 과도한 공백 제거
     text = re.sub(
         r"[ ]{2,}",
         " ",
         text,
     )
 
-    # 지나친 blank line 축소
     text = re.sub(
         r"\n{4,}",
         "\n\n\n",
@@ -211,8 +470,77 @@ def _normalize_text(
     return text.strip()
 
 
+def _normalize_space(
+    text: str,
+) -> str:
+
+    return re.sub(
+        r"\s+",
+        " ",
+        str(
+            text
+            or ""
+        ),
+    ).strip()
+
+
+def _clean_line(
+    line: str,
+) -> str:
+
+    line = (
+        line
+        .replace(
+            "\u00ad",
+            "",
+        )
+        .replace(
+            "\xa0",
+            " ",
+        )
+        .replace(
+            "\ufb01",
+            "fi",
+        )
+        .replace(
+            "\ufb02",
+            "fl",
+        )
+    )
+
+    line = line.strip()
+
+    line = re.sub(
+        r"[ \t]+",
+        " ",
+        line,
+    )
+
+    return line.strip()
+
+
+def _normalized_compare(
+    text: str,
+) -> str:
+
+    text = str(
+        text
+        or ""
+    ).lower()
+
+    text = re.sub(
+        r"[^a-z0-9]+",
+        " ",
+        text,
+    )
+
+    return " ".join(
+        text.split()
+    )
+
+
 # ============================================================
-# Metadata
+# Metadata / Resolution
 # ============================================================
 
 def _load_document_metadata(
@@ -221,17 +549,6 @@ def _load_document_metadata(
     dict,
     dict,
 ]:
-    """
-    resolver가 생성한:
-
-        metadata.json
-        resolution.json
-
-    을 읽는다.
-
-    title / abstract는 가능하면
-    NASA metadata를 신뢰한다.
-    """
 
     metadata = (
         _load_json(
@@ -266,21 +583,14 @@ def _extract_title(
         or resolution.get(
             "title"
         )
-        or ""
+        or paper_dir.name
     )
 
-    title = " ".join(
+    return _normalize_space(
         str(
             title
-        ).split()
+        )
     )
-
-    if title:
-
-        return title
-
-    # 최후 fallback
-    return paper_dir.name
 
 
 def _extract_abstract(
@@ -294,86 +604,50 @@ def _extract_abstract(
         or ""
     )
 
-    abstract = str(
-        abstract
-    )
-
-    abstract = re.sub(
-        r"\s+",
-        " ",
-        abstract,
-    )
-
-    return abstract.strip()
-
-
-# ============================================================
-# Line Helpers
-# ============================================================
-
-def _clean_line(
-    line: str,
-) -> str:
-
-    line = line.strip()
-
-    line = re.sub(
-        r"[ \t]+",
-        " ",
-        line,
-    )
-
-    return line.strip()
-
-
-def _normalized_compare(
-    text: str,
-) -> str:
-    """
-    title 중복 등을 비교할 때만 사용하는
-    느슨한 normalized representation.
-    """
-
-    text = text.lower()
-
-    text = re.sub(
-        r"[^a-z0-9]+",
-        " ",
-        text,
-    )
-
-    return " ".join(
-        text.split()
+    return _normalize_space(
+        str(
+            abstract
+        )
     )
 
 
 # ============================================================
-# Noise Line Detection
+# Noise Detection
 # ============================================================
 
 def _is_page_number(
     line: str,
 ) -> bool:
-    """
-    단독 page number:
-        1
-        12
-        123
-    """
 
-    return bool(
-        re.fullmatch(
-            r"\d{1,4}",
-            line.strip(),
-        )
+    stripped = (
+        line.strip()
     )
+
+    if re.fullmatch(
+        r"\d{1,4}",
+        stripped,
+    ):
+
+        return True
+
+    if re.fullmatch(
+        r"page\s+\d+\s*(?:of\s+\d+)?",
+        stripped,
+        flags=re.IGNORECASE,
+    ):
+
+        return True
+
+    return False
 
 
 def _is_separator_line(
     line: str,
 ) -> bool:
 
-    stripped = line.strip()
+    stripped = (
+        line.strip()
+    )
 
     if len(
         stripped
@@ -392,13 +666,10 @@ def _is_separator_line(
 def _is_probable_noise(
     line: str,
 ) -> bool:
-    """
-    아주 명확한 layout noise만 제거한다.
 
-    내용일 가능성이 있는 것은 버리지 않는다.
-    """
-
-    stripped = line.strip()
+    stripped = (
+        line.strip()
+    )
 
     if not stripped:
 
@@ -410,18 +681,8 @@ def _is_probable_noise(
 
         return True
 
-    # 단독 page number
     if _is_page_number(
         stripped
-    ):
-
-        return True
-
-    # PDF converter의 흔한 page marker
-    if re.fullmatch(
-        r"page\s+\d+\s*(?:of\s+\d+)?",
-        stripped,
-        flags=re.IGNORECASE,
     ):
 
         return True
@@ -436,47 +697,49 @@ def _is_probable_noise(
 def _strip_heading_number(
     line: str,
 ) -> str:
-    """
-    예:
-        1. INTRODUCTION
-        2.1 Navigation
-        IV. RESULTS
-        A. System Architecture
 
-    앞 번호만 제거.
-    """
+    line = str(
+        line
+        or ""
+    ).strip()
 
-    result = re.sub(
-        (
-            r"^\s*"
-            r"(?:"
-            r"\d+(?:\.\d+)*"
-            r"|[IVXLC]+"
-            r"|[A-Z]"
-            r")"
-            r"[\.\)]?"
-            r"\s+"
-        ),
+    # 1. Introduction
+    # 2.1 Navigation
+    line = re.sub(
+        r"^\d+(?:\.\d+)*[\.\)]?\s+",
         "",
         line,
-        flags=re.IGNORECASE,
     )
 
-    return result.strip()
+    # III. Results
+    line = re.sub(
+        r"^[IVXLC]+\.\s+",
+        "",
+        line,
+    )
+
+    # A. Architecture
+    line = re.sub(
+        r"^[A-Z]\.\s+",
+        "",
+        line,
+    )
+
+    return line.strip()
 
 
 def _looks_like_sentence(
     line: str,
 ) -> bool:
 
-    stripped = line.strip()
+    stripped = (
+        line.strip()
+    )
 
     if not stripped:
 
         return False
 
-    # 긴 line + sentence punctuation이면
-    # heading으로 보지 않음
     if (
         len(
             stripped
@@ -505,7 +768,9 @@ def _is_known_heading(
             line
         )
         .lower()
-        .strip(" :.-")
+        .strip(
+            " :.-"
+        )
     )
 
     return (
@@ -517,18 +782,10 @@ def _is_known_heading(
 def _is_numbered_heading(
     line: str,
 ) -> bool:
-    """
-    일반적인 technical paper section heading.
 
-    예:
-        1 Introduction
-        1. Introduction
-        2.1 System Design
-        III. RESULTS
-        A. Architecture
-    """
-
-    stripped = line.strip()
+    stripped = (
+        line.strip()
+    )
 
     if (
         len(
@@ -541,22 +798,35 @@ def _is_numbered_heading(
 
         return False
 
-    pattern = re.compile(
-        (
-            r"^(?:"
-            r"\d+(?:\.\d+)*"
-            r"|[IVXLC]+"
-            r"|[A-Z]"
-            r")"
-            r"[\.\)]?"
-            r"\s+"
-            r".{2,120}$"
-        ),
-        flags=re.IGNORECASE,
+    numeric_pattern = re.compile(
+        r"^\d+(?:\.\d+)*"
+        r"[\.\)]?"
+        r"\s+"
+        r".{2,120}$"
     )
 
-    if not pattern.match(
-        stripped
+    roman_pattern = re.compile(
+        r"^[IVXLC]+\."
+        r"\s+"
+        r".{2,120}$"
+    )
+
+    letter_pattern = re.compile(
+        r"^[A-Z]\."
+        r"\s+"
+        r".{2,120}$"
+    )
+
+    if not (
+        numeric_pattern.match(
+            stripped
+        )
+        or roman_pattern.match(
+            stripped
+        )
+        or letter_pattern.match(
+            stripped
+        )
     ):
 
         return False
@@ -567,32 +837,31 @@ def _is_numbered_heading(
         )
     )
 
-    # 실제 문장처럼 너무 길면 제외
     if _looks_like_sentence(
         heading_text
     ):
 
         return False
 
-    # heading 자체가 최소한 alphabet을 포함
     alpha_count = sum(
         1
-        for char in heading_text
+        for char
+        in heading_text
         if char.isalpha()
     )
 
-    if alpha_count < 2:
-
-        return False
-
-    return True
+    return (
+        alpha_count >= 2
+    )
 
 
 def _is_all_caps_heading(
     line: str,
 ) -> bool:
 
-    stripped = line.strip()
+    stripped = (
+        line.strip()
+    )
 
     if (
         len(
@@ -605,7 +874,6 @@ def _is_all_caps_heading(
 
         return False
 
-    # email / URL
     if (
         "@" in stripped
         or "http://" in stripped.lower()
@@ -614,9 +882,20 @@ def _is_all_caps_heading(
 
         return False
 
+    if stripped.endswith(
+        (
+            ".",
+            ";",
+            ",",
+        )
+    ):
+
+        return False
+
     letters = [
         char
-        for char in stripped
+        for char
+        in stripped
         if char.isalpha()
     ]
 
@@ -629,7 +908,8 @@ def _is_all_caps_heading(
     uppercase_ratio = (
         sum(
             1
-            for char in letters
+            for char
+            in letters
             if char.isupper()
         )
         / len(
@@ -648,38 +928,18 @@ def _is_all_caps_heading(
         )
     )
 
-    if word_count > 14:
-
-        return False
-
-    # 완전한 문장 가능성 낮은 경우만
-    if stripped.endswith(
-        (
-            ".",
-            ";",
-            ",",
-        )
-    ):
-
-        return False
-
-    return True
+    return (
+        word_count <= 14
+    )
 
 
 def _is_title_case_heading(
     line: str,
 ) -> bool:
-    """
-    번호 없는 Title Case heading을
-    매우 보수적으로 검출.
 
-    예:
-        System Architecture
-        Fault Detection Approach
-        Experimental Results
-    """
-
-    stripped = line.strip()
+    stripped = (
+        line.strip()
+    )
 
     if (
         len(
@@ -720,7 +980,6 @@ def _is_title_case_heading(
 
         return False
 
-    # lowercase function words는 허용
     allowed_lower = {
         "a",
         "an",
@@ -739,24 +998,10 @@ def _is_title_case_heading(
         "with",
     }
 
-    capitalized = 0
-
-    for word in words:
-
-        if word.lower() in allowed_lower:
-
-            continue
-
-        if (
-            word[0].isupper()
-            or word.isupper()
-        ):
-
-            capitalized += 1
-
     meaningful = [
         word
-        for word in words
+        for word
+        in words
         if word.lower()
         not in allowed_lower
     ]
@@ -764,6 +1009,16 @@ def _is_title_case_heading(
     if not meaningful:
 
         return False
+
+    capitalized = sum(
+        1
+        for word
+        in meaningful
+        if (
+            word[0].isupper()
+            or word.isupper()
+        )
+    )
 
     ratio = (
         capitalized
@@ -776,7 +1031,6 @@ def _is_title_case_heading(
 
         return False
 
-    # 전문 section 단어가 하나라도 포함되는 경우에만
     heading_terms = {
         "architecture",
         "approach",
@@ -803,12 +1057,18 @@ def _is_title_case_heading(
         "systems",
         "testing",
         "validation",
+        "autonomy",
+        "operations",
+        "simulation",
+        "performance",
+        "algorithm",
     }
 
     return any(
         word.lower()
         in heading_terms
-        for word in words
+        for word
+        in words
     )
 
 
@@ -816,7 +1076,9 @@ def _is_heading(
     line: str,
 ) -> bool:
 
-    stripped = line.strip()
+    stripped = (
+        line.strip()
+    )
 
     if not stripped:
 
@@ -852,26 +1114,22 @@ def _is_heading(
 def _heading_level(
     line: str,
 ) -> int:
-    """
-    완벽한 hierarchy 재구성이 목적이 아니라
-    section 구조 보존 목적.
 
-    1        -> level 2
-    1.2      -> level 3
-    1.2.3    -> level 4
-    """
+    stripped = (
+        line.strip()
+    )
 
-    stripped = line.strip()
-
-    match = re.match(
+    numeric_match = re.match(
         r"^(\d+(?:\.\d+)*)",
         stripped,
     )
 
-    if match:
+    if numeric_match:
 
-        number = match.group(
-            1
+        number = (
+            numeric_match.group(
+                1
+            )
         )
 
         depth = (
@@ -887,6 +1145,7 @@ def _heading_level(
             + 1,
         )
 
+    # Roman / A. / normal heading
     return 2
 
 
@@ -943,14 +1202,10 @@ def _strip_list_marker(
 def _looks_like_equation(
     text: str,
 ) -> bool:
-    """
-    아주 명확한 standalone equation만 검출.
 
-    일반 문장을 equation으로 오판하지 않도록
-    매우 보수적으로 동작.
-    """
-
-    stripped = text.strip()
+    stripped = (
+        text.strip()
+    )
 
     if (
         len(
@@ -973,7 +1228,8 @@ def _looks_like_equation(
         stripped.count(
             symbol
         )
-        for symbol in (
+        for symbol
+        in (
             "=",
             "±",
             "∑",
@@ -1021,19 +1277,12 @@ def _join_paragraph_lines(
 
     text = " ".join(
         line.strip()
-        for line in lines
+        for line
+        in lines
         if line.strip()
     )
 
-    # line-wrap hyphen:
-    #
-    # "autono- mous" 같은 변환 잔여물 일부 복원.
-    #
-    # 이미 space가 들어간 상태이므로
-    # alphabet-hyphen-space-alphabet만 처리.
-    #
-    # 단, 일반적인 "fault- tolerant" 같은 표현까지
-    # 무조건 합치지 않도록 앞뒤가 소문자인 경우 중심.
+    # naviga- tion -> navigation
     text = re.sub(
         r"(?<=[a-z])-\s+(?=[a-z])",
         "",
@@ -1050,23 +1299,13 @@ def _join_paragraph_lines(
 
 
 # ============================================================
-# Parse Lines -> Blocks
+# Text -> Blocks
 # ============================================================
 
 def _extract_blocks(
     text: str,
     title: str,
 ) -> list[dict]:
-    """
-    NASA converted TXT를 block stream으로 변환.
-
-    block:
-        heading
-        paragraph
-        list_item
-        figure_caption
-        equation
-    """
 
     raw_lines = (
         text.splitlines()
@@ -1090,7 +1329,7 @@ def _extract_blocks(
             )
         )
 
-        # blank line은 paragraph boundary로 필요
+        # blank line은 paragraph boundary
         if not line:
 
             lines.append(
@@ -1147,7 +1386,6 @@ def _extract_blocks(
 
             return
 
-        # figure caption
         if _is_figure_caption(
             paragraph
         ):
@@ -1157,7 +1395,6 @@ def _extract_blocks(
                     "type": (
                         "figure_caption"
                     ),
-
                     "text": (
                         paragraph
                     ),
@@ -1166,7 +1403,6 @@ def _extract_blocks(
 
             return
 
-        # list item
         if _is_list_item(
             paragraph
         ):
@@ -1176,7 +1412,6 @@ def _extract_blocks(
                     "type": (
                         "list_item"
                     ),
-
                     "text": (
                         _strip_list_marker(
                             paragraph
@@ -1187,7 +1422,6 @@ def _extract_blocks(
 
             return
 
-        # equation
         if _looks_like_equation(
             paragraph
         ):
@@ -1197,7 +1431,6 @@ def _extract_blocks(
                     "type": (
                         "equation"
                     ),
-
                     "text": (
                         paragraph
                     ),
@@ -1211,7 +1444,6 @@ def _extract_blocks(
                 "type": (
                     "paragraph"
                 ),
-
                 "text": (
                     paragraph
                 ),
@@ -1221,7 +1453,7 @@ def _extract_blocks(
     for line in lines:
 
         # ----------------------------------------------------
-        # Blank line
+        # Blank
         # ----------------------------------------------------
 
         if not line:
@@ -1245,13 +1477,11 @@ def _extract_blocks(
                     "type": (
                         "heading"
                     ),
-
                     "level": (
                         _heading_level(
                             line
                         )
                     ),
-
                     "text": (
                         line
                     ),
@@ -1261,7 +1491,7 @@ def _extract_blocks(
             continue
 
         # ----------------------------------------------------
-        # Standalone Figure/Table Caption
+        # Figure / Table
         # ----------------------------------------------------
 
         if _is_figure_caption(
@@ -1275,7 +1505,6 @@ def _extract_blocks(
                     "type": (
                         "figure_caption"
                     ),
-
                     "text": (
                         line
                     ),
@@ -1285,7 +1514,7 @@ def _extract_blocks(
             continue
 
         # ----------------------------------------------------
-        # Standalone List Item
+        # List
         # ----------------------------------------------------
 
         if _is_list_item(
@@ -1299,7 +1528,6 @@ def _extract_blocks(
                     "type": (
                         "list_item"
                     ),
-
                     "text": (
                         _strip_list_marker(
                             line
@@ -1311,7 +1539,7 @@ def _extract_blocks(
             continue
 
         # ----------------------------------------------------
-        # Standalone Equation
+        # Equation
         # ----------------------------------------------------
 
         if _looks_like_equation(
@@ -1325,7 +1553,6 @@ def _extract_blocks(
                     "type": (
                         "equation"
                     ),
-
                     "text": (
                         line
                     ),
@@ -1333,10 +1560,6 @@ def _extract_blocks(
             )
 
             continue
-
-        # ----------------------------------------------------
-        # Normal paragraph continuation
-        # ----------------------------------------------------
 
         paragraph_buffer.append(
             line
@@ -1360,7 +1583,9 @@ def _is_abstract_heading(
             heading
         )
         .lower()
-        .strip(" :.-")
+        .strip(
+            " :.-"
+        )
     )
 
     return (
@@ -1372,20 +1597,6 @@ def _is_abstract_heading(
 def _blocks_to_sections(
     blocks: list[dict],
 ) -> list[dict]:
-    """
-    기존 arXiv HTML parser와 동일한
-    section schema를 만든다.
-
-    {
-        "heading": ...,
-        "level": ...,
-        "blocks": [...]
-    }
-
-    metadata의 abstract를 별도 필드로 저장하므로
-    본문에 다시 등장하는 ABSTRACT section은
-    중복 방지를 위해 sections에서 제외한다.
-    """
 
     sections: list[dict] = []
 
@@ -1393,9 +1604,7 @@ def _blocks_to_sections(
         "heading": (
             "Document Body"
         ),
-
         "level": 1,
-
         "blocks": [],
     }
 
@@ -1410,7 +1619,6 @@ def _blocks_to_sections(
             == "heading"
         ):
 
-            # 기존 section 저장
             if (
                 current_section[
                     "blocks"
@@ -1430,15 +1638,15 @@ def _blocks_to_sections(
             ).strip()
 
             current_section = {
-                "heading": heading,
-
+                "heading": (
+                    heading
+                ),
                 "level": (
                     block.get(
                         "level",
                         2,
                     )
                 ),
-
                 "blocks": [],
             }
 
@@ -1470,10 +1678,6 @@ def _blocks_to_sections(
     return sections
 
 
-# ============================================================
-# Duplicate Empty Sections
-# ============================================================
-
 def _remove_empty_sections(
     sections: list[dict],
 ) -> list[dict]:
@@ -1489,13 +1693,10 @@ def _remove_empty_sections(
             )
         )
 
-        if not blocks:
-
-            continue
-
         useful_blocks = [
             block
-            for block in blocks
+            for block
+            in blocks
             if str(
                 block.get(
                     "text",
@@ -1528,26 +1729,17 @@ def _remove_empty_sections(
 # ============================================================
 
 def _render_raw_content(
+    *,
     title: str,
     abstract: str,
     sections: list[dict],
 ) -> str:
-    """
-    기존 arXiv parser와 동일한 내부 표현.
-
-    # TITLE
-    ...
-    ## ABSTRACT
-    ...
-    ## INTRODUCTION
-    ...
-    """
 
     output: list[str] = []
 
-    # ========================================================
+    # --------------------------------------------------------
     # Title
-    # ========================================================
+    # --------------------------------------------------------
 
     if title:
 
@@ -1563,9 +1755,9 @@ def _render_raw_content(
             ""
         )
 
-    # ========================================================
+    # --------------------------------------------------------
     # Abstract
-    # ========================================================
+    # --------------------------------------------------------
 
     if abstract:
 
@@ -1581,9 +1773,9 @@ def _render_raw_content(
             ""
         )
 
-    # ========================================================
+    # --------------------------------------------------------
     # Sections
-    # ========================================================
+    # --------------------------------------------------------
 
     for section in sections:
 
@@ -1592,7 +1784,7 @@ def _render_raw_content(
                 "heading",
                 "Document Body",
             )
-        )
+        ).strip()
 
         level = int(
             section.get(
@@ -1713,7 +1905,8 @@ def _alpha_ratio(
 
     alpha_count = sum(
         1
-        for char in text
+        for char
+        in text
         if char.isalpha()
     )
 
@@ -1729,6 +1922,8 @@ def _alpha_ratio(
 def _build_stats(
     raw_content: str,
     sections: list[dict],
+    *,
+    page_count: int | None = None,
 ) -> dict:
 
     paragraph_count = 0
@@ -1777,35 +1972,28 @@ def _build_stats(
 
                 figure_caption_count += 1
 
-    return {
+    stats = {
         "char_count": len(
             raw_content
         ),
-
         "word_count": len(
             raw_content.split()
         ),
-
         "section_count": len(
             sections
         ),
-
         "paragraph_count": (
             paragraph_count
         ),
-
         "list_item_count": (
             list_item_count
         ),
-
         "equation_count": (
             equation_count
         ),
-
         "figure_caption_count": (
             figure_caption_count
         ),
-
         "alpha_ratio": (
             _alpha_ratio(
                 raw_content
@@ -1813,18 +2001,26 @@ def _build_stats(
         ),
     }
 
+    if page_count is not None:
+
+        stats[
+            "page_count"
+        ] = page_count
+
+    return stats
+
 
 # ============================================================
-# Parse One NTRS TXT
+# Common Parse Builder
 # ============================================================
 
-def parse_txt_file(
-    txt_path: Path,
+def _build_parsed_result(
+    *,
+    paper_dir: Path,
+    source_text: str,
+    parser_mode: str,
+    page_count: int | None = None,
 ) -> dict:
-
-    paper_dir = (
-        txt_path.parent
-    )
 
     metadata, resolution = (
         _load_document_metadata(
@@ -1843,13 +2039,6 @@ def parse_txt_file(
     abstract = (
         _extract_abstract(
             metadata
-        )
-    )
-
-    source_text = (
-        txt_path.read_text(
-            encoding="utf-8",
-            errors="replace",
         )
     )
 
@@ -1890,66 +2079,464 @@ def parse_txt_file(
         _build_stats(
             raw_content,
             sections,
+            page_count=(
+                page_count
+            ),
         )
+    )
+
+    source_id = (
+        metadata.get(
+            "source_id"
+        )
+        or resolution.get(
+            "source_id"
+        )
+        or paper_dir.name
+    )
+
+    topic_axis = (
+        metadata.get(
+            "topic_axis"
+        )
+        or resolution.get(
+            "topic_axis"
+        )
+        or paper_dir.parent.name
     )
 
     return {
         "title": (
             title
         ),
-
         "abstract": (
             abstract
         ),
-
         "sections": (
             sections
         ),
-
         "raw_content": (
             raw_content
         ),
-
         "stats": (
             stats
         ),
-
         "source_info": {
-            "source": "ntrs",
-
+            "source": (
+                "ntrs"
+            ),
             "source_id": (
-                metadata.get(
-                    "source_id"
-                )
-                or resolution.get(
-                    "source_id"
-                )
-                or paper_dir.name
+                source_id
             ),
-
             "topic_axis": (
-                metadata.get(
-                    "topic_axis"
-                )
-                or resolution.get(
-                    "topic_axis"
-                )
-                or paper_dir.parent.name
+                topic_axis
             ),
-
             "selected_format": (
                 resolution.get(
                     "selected_format"
                 )
             ),
-
             "source_url": (
                 resolution.get(
                     "source_url"
                 )
             ),
+            "parser_mode": (
+                parser_mode
+            ),
+            "parser_version": (
+                PARSER_VERSION
+            ),
+            "repair": (
+                resolution.get(
+                    "repair"
+                )
+            ),
         },
     }
+
+
+# ============================================================
+# TXT Parser
+# ============================================================
+
+def parse_txt_file(
+    txt_path: Path,
+) -> dict:
+
+    source_text = (
+        txt_path.read_text(
+            encoding="utf-8",
+            errors="replace",
+        )
+    )
+
+    return (
+        _build_parsed_result(
+            paper_dir=(
+                txt_path.parent
+            ),
+            source_text=(
+                source_text
+            ),
+            parser_mode=(
+                "ntrs_txt"
+            ),
+        )
+    )
+
+
+# ============================================================
+# PDF Extraction
+# ============================================================
+
+def _extract_pdf_pages(
+    pdf_path: Path,
+) -> list[str]:
+
+    reader = (
+        PdfReader(
+            str(
+                pdf_path
+            )
+        )
+    )
+
+    pages = []
+
+    for page in reader.pages:
+
+        try:
+
+            text = (
+                page.extract_text()
+                or ""
+            )
+
+        except Exception:
+
+            text = ""
+
+        # ----------------------------------------------------
+        # line-end hyphenation
+        #
+        # naviga-
+        # tion
+        #
+        # -> navigation
+        # ----------------------------------------------------
+
+        text = re.sub(
+            r"(?<=\w)-\s*\n\s*(?=\w)",
+            "",
+            text,
+        )
+
+        text = (
+            text
+            .replace(
+                "\u00ad",
+                "",
+            )
+            .replace(
+                "\ufb01",
+                "fi",
+            )
+            .replace(
+                "\ufb02",
+                "fl",
+            )
+        )
+
+        pages.append(
+            text
+        )
+
+    return pages
+
+
+# ============================================================
+# Repeated PDF Headers / Footers
+# ============================================================
+
+def _detect_repeated_pdf_lines(
+    pages: list[str],
+) -> set[str]:
+
+    counter = Counter()
+
+    for page_text in pages:
+
+        unique_page_lines = set()
+
+        for raw_line in (
+            page_text.splitlines()
+        ):
+
+            line = (
+                _clean_line(
+                    raw_line
+                )
+            )
+
+            if not line:
+
+                continue
+
+            # 긴 본문은 반복돼도 header/footer로 제거하지 않는다.
+            if len(
+                line
+            ) > 100:
+
+                continue
+
+            unique_page_lines.add(
+                line
+            )
+
+        for line in unique_page_lines:
+
+            counter[
+                line
+            ] += 1
+
+    if not pages:
+
+        return set()
+
+    threshold = max(
+        3,
+        len(
+            pages
+        ) // 2,
+    )
+
+    return {
+        line
+        for (
+            line,
+            count,
+        )
+        in counter.items()
+        if count >= threshold
+    }
+
+
+def _pdf_pages_to_text(
+    pages: list[str],
+) -> str:
+
+    repeated_lines = (
+        _detect_repeated_pdf_lines(
+            pages
+        )
+    )
+
+    document_lines = []
+
+    for page_text in pages:
+
+        page_lines = []
+
+        for raw_line in (
+            page_text.splitlines()
+        ):
+
+            line = (
+                _clean_line(
+                    raw_line
+                )
+            )
+
+            if not line:
+
+                # 원래 PDF에 blank가 있으면
+                # paragraph boundary 유지
+                if (
+                    page_lines
+                    and page_lines[
+                        -1
+                    ] != ""
+                ):
+
+                    page_lines.append(
+                        ""
+                    )
+
+                continue
+
+            if (
+                line
+                in repeated_lines
+            ):
+
+                continue
+
+            if _is_page_number(
+                line
+            ):
+
+                continue
+
+            page_lines.append(
+                line
+            )
+
+        document_lines.extend(
+            page_lines
+        )
+
+        # page boundary
+        document_lines.extend(
+            [
+                "",
+                "",
+            ]
+        )
+
+    return "\n".join(
+        document_lines
+    ).strip()
+
+
+# ============================================================
+# PDF Parser
+# ============================================================
+
+def parse_pdf_file(
+    pdf_path: Path,
+) -> dict:
+
+    pages = (
+        _extract_pdf_pages(
+            pdf_path
+        )
+    )
+
+    if not pages:
+
+        raise RuntimeError(
+            "PDF contains no pages."
+        )
+
+    extracted_char_count = sum(
+        len(
+            page.strip()
+        )
+        for page
+        in pages
+    )
+
+    if extracted_char_count < 500:
+
+        raise RuntimeError(
+            "PDF text extraction produced "
+            "too little text."
+        )
+
+    source_text = (
+        _pdf_pages_to_text(
+            pages
+        )
+    )
+
+    return (
+        _build_parsed_result(
+            paper_dir=(
+                pdf_path.parent
+            ),
+            source_text=(
+                source_text
+            ),
+            parser_mode=(
+                "ntrs_pdf_pypdf"
+            ),
+            page_count=(
+                len(
+                    pages
+                )
+            ),
+        )
+    )
+
+
+# ============================================================
+# Parsed Result Validation
+# ============================================================
+
+def _validate_parsed(
+    parsed: dict,
+) -> None:
+
+    raw_content = str(
+        parsed.get(
+            "raw_content",
+            "",
+        )
+    ).strip()
+
+    stats = (
+        parsed.get(
+            "stats",
+            {}
+        )
+    )
+
+    if not raw_content:
+
+        raise RuntimeError(
+            "Parsed raw_content is empty."
+        )
+
+    char_count = int(
+        stats.get(
+            "char_count",
+            0,
+        )
+        or 0
+    )
+
+    word_count = int(
+        stats.get(
+            "word_count",
+            0,
+        )
+        or 0
+    )
+
+    section_count = int(
+        stats.get(
+            "section_count",
+            0,
+        )
+        or 0
+    )
+
+    if (
+        char_count
+        < MIN_PARSED_CHARS
+    ):
+
+        raise RuntimeError(
+            "Parsed content too short: "
+            f"{char_count} chars."
+        )
+
+    if (
+        word_count
+        < MIN_PARSED_WORDS
+    ):
+
+        raise RuntimeError(
+            "Parsed content too short: "
+            f"{word_count} words."
+        )
+
+    if section_count < 1:
+
+        raise RuntimeError(
+            "No parsed sections."
+        )
 
 
 # ============================================================
@@ -1984,25 +2571,21 @@ def _save_parsed_document(
                 "title"
             ]
         ),
-
         "abstract": (
             parsed[
                 "abstract"
             ]
         ),
-
         "sections": (
             parsed[
                 "sections"
             ]
         ),
-
         "stats": (
             parsed[
                 "stats"
             ]
         ),
-
         "source_info": (
             parsed[
                 "source_info"
@@ -2016,37 +2599,431 @@ def _save_parsed_document(
     )
 
 
+def _remove_stale_outputs(
+    paper_dir: Path,
+) -> None:
+
+    for filename in (
+        "raw_content.txt",
+        "parsed_document.json",
+    ):
+
+        path = (
+            paper_dir
+            / filename
+        )
+
+        if path.exists():
+
+            try:
+
+                path.unlink()
+
+            except OSError:
+
+                pass
+
+
 # ============================================================
-# Find Files
+# Resolve Canonical Source File
 # ============================================================
 
-def _find_txt_files() -> list[
-    Path
+def _resolve_input_file(
+    *,
+    topic_axis: str,
+    source_id: str,
+) -> tuple[
+    str,
+    Path,
+    dict,
 ]:
-    """
-    NTRS resolver v2 결과:
 
-    data/tmp/ntrs_resolved/
-        rover_autonomy/
-            ID/
-                paper.txt
-                metadata.json
-                resolution.json
-    """
+    paper_dir = (
+        RESOLVED_ROOT
+        / topic_axis
+        / source_id
+    )
 
-    if not RESOLVED_ROOT.exists():
+    if not paper_dir.exists():
 
         raise FileNotFoundError(
-            "NTRS resolved root "
-            f"not found: "
-            f"{RESOLVED_ROOT}"
+            "Resolved paper directory "
+            f"not found: {paper_dir}"
         )
 
-    return sorted(
-        RESOLVED_ROOT.glob(
-            "*/*/paper.txt"
+    resolution_path = (
+        paper_dir
+        / "resolution.json"
+    )
+
+    resolution = (
+        _load_json(
+            resolution_path
         )
     )
+
+    if not resolution.get(
+        "success",
+        False,
+    ):
+
+        raise RuntimeError(
+            f"{source_id}: "
+            "resolution.success is not True."
+        )
+
+    resolution_source_id = str(
+        resolution.get(
+            "source_id",
+            "",
+        )
+    ).strip()
+
+    if (
+        resolution_source_id
+        and resolution_source_id
+        != source_id
+    ):
+
+        raise RuntimeError(
+            f"{source_id}: "
+            "resolution source_id mismatch: "
+            f"{resolution_source_id}"
+        )
+
+    resolution_axis = str(
+        resolution.get(
+            "topic_axis",
+            "",
+        )
+    ).strip()
+
+    if (
+        resolution_axis
+        and resolution_axis
+        != topic_axis
+    ):
+
+        raise RuntimeError(
+            f"{source_id}: "
+            "resolution topic_axis mismatch: "
+            f"{resolution_axis}"
+        )
+
+    selected_format = str(
+        resolution.get(
+            "selected_format",
+            "",
+        )
+    ).lower().strip()
+
+    if selected_format not in {
+        "txt",
+        "original_text",
+        "pdf",
+    }:
+
+        raise RuntimeError(
+            f"{source_id}: "
+            "unsupported selected_format: "
+            f"{selected_format}"
+        )
+
+    # --------------------------------------------------------
+    # Resolver canonical local_file
+    # --------------------------------------------------------
+
+    local_file_value = (
+        resolution.get(
+            "local_file"
+        )
+    )
+
+    local_file = None
+
+    if local_file_value:
+
+        local_file = Path(
+            str(
+                local_file_value
+            )
+        )
+
+        if not local_file.is_absolute():
+
+            local_file = (
+                paper_dir
+                / local_file
+            )
+
+    # --------------------------------------------------------
+    # Fallback
+    # --------------------------------------------------------
+
+    if (
+        local_file is None
+        or not local_file.exists()
+    ):
+
+        if selected_format in {
+            "txt",
+            "original_text",
+        }:
+
+            fallback = (
+                paper_dir
+                / "paper.txt"
+            )
+
+        else:
+
+            fallback = (
+                paper_dir
+                / "paper.pdf"
+            )
+
+        if fallback.exists():
+
+            local_file = (
+                fallback
+            )
+
+    if (
+        local_file is None
+        or not local_file.exists()
+    ):
+
+        raise FileNotFoundError(
+            f"{source_id}: "
+            "resolved local file missing."
+        )
+
+    return (
+        selected_format,
+        local_file,
+        resolution,
+    )
+
+
+# ============================================================
+# Parse One Frozen Document
+# ============================================================
+
+def _parse_selected_document(
+    *,
+    topic_axis: str,
+    source_id: str,
+) -> dict:
+
+    (
+        selected_format,
+        input_path,
+        resolution,
+    ) = (
+        _resolve_input_file(
+            topic_axis=(
+                topic_axis
+            ),
+            source_id=(
+                source_id
+            ),
+        )
+    )
+
+    paper_dir = (
+        RESOLVED_ROOT
+        / topic_axis
+        / source_id
+    )
+
+    if selected_format in {
+        "txt",
+        "original_text",
+    }:
+
+        parsed = (
+            parse_txt_file(
+                input_path
+            )
+        )
+
+        parser_type = (
+            "TXT"
+        )
+
+    elif (
+        selected_format
+        == "pdf"
+    ):
+
+        parsed = (
+            parse_pdf_file(
+                input_path
+            )
+        )
+
+        parser_type = (
+            "PDF"
+        )
+
+    else:
+
+        raise RuntimeError(
+            f"Unsupported format: "
+            f"{selected_format}"
+        )
+
+    _validate_parsed(
+        parsed
+    )
+
+    _save_parsed_document(
+        paper_dir,
+        parsed,
+    )
+
+    stats = (
+        parsed[
+            "stats"
+        ]
+    )
+
+    return {
+        "status": (
+            "success"
+        ),
+        "topic_axis": (
+            topic_axis
+        ),
+        "source_id": (
+            source_id
+        ),
+        "selected_format": (
+            selected_format
+        ),
+        "parser_type": (
+            parser_type
+        ),
+        "input_file": (
+            str(
+                input_path
+            )
+        ),
+        "title": (
+            parsed[
+                "title"
+            ]
+        ),
+        "section_count": (
+            stats.get(
+                "section_count",
+                0,
+            )
+        ),
+        "paragraph_count": (
+            stats.get(
+                "paragraph_count",
+                0,
+            )
+        ),
+        "word_count": (
+            stats.get(
+                "word_count",
+                0,
+            )
+        ),
+        "char_count": (
+            stats.get(
+                "char_count",
+                0,
+            )
+        ),
+        "alpha_ratio": (
+            stats.get(
+                "alpha_ratio",
+                0.0,
+            )
+        ),
+        "page_count": (
+            stats.get(
+                "page_count"
+            )
+        ),
+        "repair": (
+            resolution.get(
+                "repair"
+            )
+        ),
+    }
+
+
+# ============================================================
+# Final Output Verification
+# ============================================================
+
+def _verify_output_files(
+    *,
+    topic_axis: str,
+    source_id: str,
+) -> None:
+
+    paper_dir = (
+        RESOLVED_ROOT
+        / topic_axis
+        / source_id
+    )
+
+    raw_path = (
+        paper_dir
+        / "raw_content.txt"
+    )
+
+    parsed_path = (
+        paper_dir
+        / "parsed_document.json"
+    )
+
+    if not raw_path.exists():
+
+        raise RuntimeError(
+            f"{source_id}: "
+            "raw_content.txt missing "
+            "after parser."
+        )
+
+    if not parsed_path.exists():
+
+        raise RuntimeError(
+            f"{source_id}: "
+            "parsed_document.json missing "
+            "after parser."
+        )
+
+    if not raw_path.read_text(
+        encoding="utf-8",
+        errors="replace",
+    ).strip():
+
+        raise RuntimeError(
+            f"{source_id}: "
+            "raw_content.txt is empty."
+        )
+
+    parsed = (
+        _load_json(
+            parsed_path
+        )
+    )
+
+    if not parsed.get(
+        "sections"
+    ):
+
+        raise RuntimeError(
+            f"{source_id}: "
+            "parsed_document.json has "
+            "no sections."
+        )
 
 
 # ============================================================
@@ -2054,19 +3031,19 @@ def _find_txt_files() -> list[
 # ============================================================
 
 def _save_report(
+    *,
     results: list[dict],
+    format_counts: dict[str, int],
+    parser_counts: dict[str, int],
+    axis_success: dict[str, int],
 ) -> None:
-
-    REPORT_DIR.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
 
     success_count = sum(
         1
-        for item in results
+        for result
+        in results
         if (
-            item.get(
+            result.get(
                 "status"
             )
             == "success"
@@ -2080,55 +3057,140 @@ def _save_report(
         - success_count
     )
 
-    total_words = sum(
-        item.get(
-            "word_count",
-            0,
-        )
-        for item in results
+    successful = [
+        result
+        for result
+        in results
         if (
-            item.get(
+            result.get(
                 "status"
             )
             == "success"
         )
+    ]
+
+    total_words = sum(
+        int(
+            result.get(
+                "word_count",
+                0,
+            )
+            or 0
+        )
+        for result
+        in successful
     )
 
     total_chars = sum(
-        item.get(
-            "char_count",
-            0,
-        )
-        for item in results
-        if (
-            item.get(
-                "status"
+        int(
+            result.get(
+                "char_count",
+                0,
             )
-            == "success"
+            or 0
         )
+        for result
+        in successful
     )
 
-    payload = {
-        "total": len(
-            results
-        ),
+    word_counts = [
+        int(
+            result.get(
+                "word_count",
+                0,
+            )
+            or 0
+        )
+        for result
+        in successful
+    ]
 
+    char_counts = [
+        int(
+            result.get(
+                "char_count",
+                0,
+            )
+            or 0
+        )
+        for result
+        in successful
+    ]
+
+    payload = {
+        "parser_version": (
+            PARSER_VERSION
+        ),
+        "selection_file": (
+            str(
+                SELECTION_FILE
+            )
+        ),
+        "expected_total": (
+            EXPECTED_TOTAL
+        ),
+        "selected": (
+            len(
+                results
+            )
+        ),
         "success": (
             success_count
         ),
-
         "failed": (
             failed_count
         ),
-
+        "resolved_formats": (
+            format_counts
+        ),
+        "parser_success": (
+            parser_counts
+        ),
+        "axis_success": (
+            axis_success
+        ),
         "total_words": (
             total_words
         ),
-
         "total_chars": (
             total_chars
         ),
-
+        "word_range": (
+            {
+                "min": (
+                    min(
+                        word_counts
+                    )
+                    if word_counts
+                    else 0
+                ),
+                "max": (
+                    max(
+                        word_counts
+                    )
+                    if word_counts
+                    else 0
+                ),
+            }
+        ),
+        "char_range": (
+            {
+                "min": (
+                    min(
+                        char_counts
+                    )
+                    if char_counts
+                    else 0
+                ),
+                "max": (
+                    max(
+                        char_counts
+                    )
+                    if char_counts
+                    else 0
+                ),
+            }
+        ),
         "documents": (
             results
         ),
@@ -2147,242 +3209,290 @@ def _save_report(
 def main():
 
     print()
-    print("=" * 70)
+    print("=" * 78)
 
     print(
-        "TEAM B - NASA NTRS TXT Parser"
+        "TEAM B - NASA NTRS "
+        "Core-100 Batch Parser"
     )
 
-    print("=" * 70)
+    print("=" * 78)
 
     print(
-        f"Input root : "
+        f"Parser version : "
+        f"{PARSER_VERSION}"
+    )
+
+    print(
+        f"Selection file : "
+        f"{SELECTION_FILE}"
+    )
+
+    print(
+        f"Input root     : "
         f"{RESOLVED_ROOT}"
     )
 
-    txt_files = (
-        _find_txt_files()
-    )
-
     print(
-        f"TXT files  : "
-        f"{len(txt_files)}"
+        f"Report         : "
+        f"{REPORT_FILE}"
     )
 
-    if not txt_files:
+    # ========================================================
+    # Frozen Selection
+    # ========================================================
 
-        print()
-        print(
-            "[STOP] No paper.txt files found."
-        )
-
-        return
+    selection = (
+        _load_selection()
+    )
 
     print()
-
-    results: list[
-        dict
-    ] = []
-
-    # ========================================================
-    # Parse
-    # ========================================================
-
-    for index, txt_path in enumerate(
-        txt_files,
-        start=1,
-    ):
-
-        paper_dir = (
-            txt_path.parent
-        )
-
-        source_id = (
-            paper_dir.name
-        )
-
-        topic_axis = (
-            paper_dir.parent.name
-        )
-
-        print(
-            "-" * 70
-        )
-
-        print(
-            f"[{index}/"
-            f"{len(txt_files)}]"
-        )
-
-        print(
-            f"[AXIS] "
-            f"{topic_axis}"
-        )
-
-        print(
-            f"[ID]   "
-            f"{source_id}"
-        )
-
-        print(
-            f"[FILE] "
-            f"{txt_path}"
-        )
-
-        print(
-            "-" * 70
-        )
-
-        try:
-
-            parsed = (
-                parse_txt_file(
-                    txt_path
-                )
-            )
-
-            stats = (
-                parsed[
-                    "stats"
-                ]
-            )
-
-            _save_parsed_document(
-                paper_dir,
-                parsed,
-            )
-
-            print(
-                f"[OK] Title      : "
-                f"{parsed['title']}"
-            )
-
-            print(
-                f"[OK] Sections   : "
-                f"{stats['section_count']}"
-            )
-
-            print(
-                f"[OK] Paragraphs : "
-                f"{stats['paragraph_count']}"
-            )
-
-            print(
-                f"[OK] Words      : "
-                f"{stats['word_count']}"
-            )
-
-            print(
-                f"[OK] Chars      : "
-                f"{stats['char_count']}"
-            )
-
-            print(
-                f"[OK] Alpha      : "
-                f"{stats['alpha_ratio']}"
-            )
-
-            print(
-                "[SAVE] "
-                f"{paper_dir / 'raw_content.txt'}"
-            )
-
-            results.append(
-                {
-                    "status": (
-                        "success"
-                    ),
-
-                    "topic_axis": (
-                        topic_axis
-                    ),
-
-                    "source_id": (
-                        source_id
-                    ),
-
-                    "title": (
-                        parsed[
-                            "title"
-                        ]
-                    ),
-
-                    "section_count": (
-                        stats[
-                            "section_count"
-                        ]
-                    ),
-
-                    "paragraph_count": (
-                        stats[
-                            "paragraph_count"
-                        ]
-                    ),
-
-                    "word_count": (
-                        stats[
-                            "word_count"
-                        ]
-                    ),
-
-                    "char_count": (
-                        stats[
-                            "char_count"
-                        ]
-                    ),
-
-                    "alpha_ratio": (
-                        stats[
-                            "alpha_ratio"
-                        ]
-                    ),
-                }
-            )
-
-        except Exception as exc:
-
-            print(
-                f"[FAILED] "
-                f"{type(exc).__name__}: "
-                f"{exc}"
-            )
-
-            results.append(
-                {
-                    "status": (
-                        "failed"
-                    ),
-
-                    "topic_axis": (
-                        topic_axis
-                    ),
-
-                    "source_id": (
-                        source_id
-                    ),
-
-                    "error": (
-                        f"{type(exc).__name__}: "
-                        f"{exc}"
-                    ),
-                }
-            )
-
-        print()
-
-    # ========================================================
-    # Report
-    # ========================================================
-
-    _save_report(
-        results
+    print(
+        "Frozen selection:"
     )
+
+    for (
+        topic_axis,
+        expected_count,
+    ) in EXPECTED_COUNTS.items():
+
+        actual = len(
+            selection[
+                topic_axis
+            ]
+        )
+
+        print(
+            f"  "
+            f"{topic_axis:22} : "
+            f"{actual} / "
+            f"{expected_count}"
+        )
+
+    print(
+        f"  "
+        f"{'TOTAL':22} : "
+        f"{sum(len(x) for x in selection.values())}"
+    )
+
+    # ========================================================
+    # Counters
+    # ========================================================
+
+    results = []
+
+    format_counts = {
+        "txt": 0,
+        "original_text": 0,
+        "pdf": 0,
+    }
+
+    parser_counts = {
+        "TXT": 0,
+        "PDF": 0,
+    }
+
+    axis_success = {
+        topic_axis: 0
+        for topic_axis
+        in EXPECTED_COUNTS
+    }
+
+    # ========================================================
+    # Parse exactly selected 35
+    # ========================================================
+
+    global_index = 0
+
+    for topic_axis in EXPECTED_COUNTS:
+
+        for source_id in (
+            selection[
+                topic_axis
+            ]
+        ):
+
+            global_index += 1
+
+            print()
+            print("-" * 78)
+
+            print(
+                f"[{global_index}/"
+                f"{EXPECTED_TOTAL}]"
+            )
+
+            print(
+                f"[AXIS] "
+                f"{topic_axis}"
+            )
+
+            print(
+                f"[ID]   "
+                f"{source_id}"
+            )
+
+            try:
+
+                (
+                    selected_format,
+                    input_path,
+                    _resolution,
+                ) = (
+                    _resolve_input_file(
+                        topic_axis=(
+                            topic_axis
+                        ),
+                        source_id=(
+                            source_id
+                        ),
+                    )
+                )
+
+                print(
+                    f"[FMT]  "
+                    f"{selected_format}"
+                )
+
+                print(
+                    f"[FILE] "
+                    f"{input_path}"
+                )
+
+                result = (
+                    _parse_selected_document(
+                        topic_axis=(
+                            topic_axis
+                        ),
+                        source_id=(
+                            source_id
+                        ),
+                    )
+                )
+
+                _verify_output_files(
+                    topic_axis=(
+                        topic_axis
+                    ),
+                    source_id=(
+                        source_id
+                    ),
+                )
+
+                format_counts[
+                    selected_format
+                ] += 1
+
+                parser_counts[
+                    result[
+                        "parser_type"
+                    ]
+                ] += 1
+
+                axis_success[
+                    topic_axis
+                ] += 1
+
+                print(
+                    f"[OK] Title      : "
+                    f"{result['title']}"
+                )
+
+                if (
+                    result.get(
+                        "page_count"
+                    )
+                    is not None
+                ):
+
+                    print(
+                        f"[OK] Pages      : "
+                        f"{result['page_count']}"
+                    )
+
+                print(
+                    f"[OK] Sections   : "
+                    f"{result['section_count']}"
+                )
+
+                print(
+                    f"[OK] Paragraphs : "
+                    f"{result['paragraph_count']}"
+                )
+
+                print(
+                    f"[OK] Words      : "
+                    f"{result['word_count']}"
+                )
+
+                print(
+                    f"[OK] Chars      : "
+                    f"{result['char_count']}"
+                )
+
+                print(
+                    f"[OK] Alpha      : "
+                    f"{result['alpha_ratio']}"
+                )
+
+                print(
+                    "[SAVE] "
+                    f"{RESOLVED_ROOT / topic_axis / source_id / 'raw_content.txt'}"
+                )
+
+                print(
+                    "[SAVE] "
+                    f"{RESOLVED_ROOT / topic_axis / source_id / 'parsed_document.json'}"
+                )
+
+                results.append(
+                    result
+                )
+
+            except Exception as exc:
+
+                # stale parser output가 남아
+                # 다음 Cleaner가 잘못 통과하는 것을 방지
+                _remove_stale_outputs(
+                    RESOLVED_ROOT
+                    / topic_axis
+                    / source_id
+                )
+
+                print(
+                    f"[FAILED] "
+                    f"{type(exc).__name__}: "
+                    f"{exc}"
+                )
+
+                results.append(
+                    {
+                        "status": (
+                            "failed"
+                        ),
+                        "topic_axis": (
+                            topic_axis
+                        ),
+                        "source_id": (
+                            source_id
+                        ),
+                        "error": (
+                            f"{type(exc).__name__}: "
+                            f"{exc}"
+                        ),
+                    }
+                )
+
+    # ========================================================
+    # Result Stats
+    # ========================================================
 
     success_count = sum(
         1
-        for item in results
+        for result
+        in results
         if (
-            item.get(
+            result.get(
                 "status"
             )
             == "success"
@@ -2396,64 +3506,170 @@ def main():
         - success_count
     )
 
-    total_words = sum(
-        item.get(
-            "word_count",
-            0,
-        )
-        for item in results
+    successful = [
+        result
+        for result
+        in results
         if (
-            item.get(
+            result.get(
                 "status"
             )
             == "success"
         )
+    ]
+
+    total_words = sum(
+        int(
+            result.get(
+                "word_count",
+                0,
+            )
+            or 0
+        )
+        for result
+        in successful
     )
 
     total_chars = sum(
-        item.get(
-            "char_count",
-            0,
-        )
-        for item in results
-        if (
-            item.get(
-                "status"
+        int(
+            result.get(
+                "char_count",
+                0,
             )
-            == "success"
+            or 0
         )
+        for result
+        in successful
+    )
+
+    word_counts = [
+        int(
+            result.get(
+                "word_count",
+                0,
+            )
+            or 0
+        )
+        for result
+        in successful
+    ]
+
+    char_counts = [
+        int(
+            result.get(
+                "char_count",
+                0,
+            )
+            or 0
+        )
+        for result
+        in successful
+    ]
+
+    # ========================================================
+    # Report
+    # ========================================================
+
+    _save_report(
+        results=(
+            results
+        ),
+        format_counts=(
+            format_counts
+        ),
+        parser_counts=(
+            parser_counts
+        ),
+        axis_success=(
+            axis_success
+        ),
     )
 
     # ========================================================
     # Summary
     # ========================================================
 
-    print(
-        "=" * 70
-    )
+    print()
+    print("=" * 78)
 
     print(
-        "NTRS TXT PARSING COMPLETED"
+        "NTRS CORE-100 BATCH "
+        "PARSING COMPLETED"
     )
 
-    print(
-        "=" * 70
-    )
+    print("=" * 78)
 
     print(
-        f"Total       : "
+        f"Selected : "
         f"{len(results)}"
     )
 
     print(
-        f"Success     : "
+        f"Success  : "
         f"{success_count}"
     )
 
     print(
-        f"Failed      : "
+        f"Failed   : "
         f"{failed_count}"
     )
+
+    print()
+
+    print(
+        "Resolved formats:"
+    )
+
+    print(
+        f"  TXT           : "
+        f"{format_counts['txt']}"
+    )
+
+    print(
+        f"  Original text : "
+        f"{format_counts['original_text']}"
+    )
+
+    print(
+        f"  PDF           : "
+        f"{format_counts['pdf']}"
+    )
+
+    print()
+
+    print(
+        "Parser success:"
+    )
+
+    print(
+        f"  TXT : "
+        f"{parser_counts['TXT']}"
+    )
+
+    print(
+        f"  PDF : "
+        f"{parser_counts['PDF']}"
+    )
+
+    print()
+
+    print(
+        "Axis QA:"
+    )
+
+    for (
+        topic_axis,
+        expected_count,
+    ) in EXPECTED_COUNTS.items():
+
+        print(
+            f"  "
+            f"{topic_axis:22} : "
+            f"{axis_success[topic_axis]} / "
+            f"{expected_count}"
+        )
+
+    print()
 
     print(
         f"Total words : "
@@ -2465,13 +3681,119 @@ def main():
         f"{total_chars}"
     )
 
+    if word_counts:
+
+        print(
+            f"Word range  : "
+            f"{min(word_counts)} "
+            f"~ "
+            f"{max(word_counts)}"
+        )
+
+    if char_counts:
+
+        print(
+            f"Char range  : "
+            f"{min(char_counts)} "
+            f"~ "
+            f"{max(char_counts)}"
+        )
+
+    print()
+
     print(
         f"Report      : "
         f"{REPORT_FILE}"
     )
 
+    print("=" * 78)
+
+    # ========================================================
+    # Hard Gate
+    # ========================================================
+
+    all_axes_pass = all(
+        axis_success[
+            topic_axis
+        ]
+        == expected_count
+        for (
+            topic_axis,
+            expected_count,
+        )
+        in EXPECTED_COUNTS.items()
+    )
+
+    all_formats_accounted = (
+        sum(
+            format_counts.values()
+        )
+        == EXPECTED_TOTAL
+    )
+
+    parser_count_ok = (
+        sum(
+            parser_counts.values()
+        )
+        == EXPECTED_TOTAL
+    )
+
+    if (
+        len(
+            results
+        )
+        == EXPECTED_TOTAL
+        and success_count
+        == EXPECTED_TOTAL
+        and failed_count
+        == 0
+        and all_axes_pass
+        and all_formats_accounted
+        and parser_count_ok
+    ):
+
+        print(
+            "[PASS] All 35 selected "
+            "NTRS papers parsed."
+        )
+
+        print()
+
+        print(
+            "NEXT:"
+        )
+
+        print(
+            "Run NTRS Cleaner for "
+            "these 35 documents only."
+        )
+
+        print("=" * 78)
+
+        return
+
     print(
-        "=" * 70
+        "[CHECK] Parsing Gate failed."
+    )
+
+    print()
+
+    print(
+        "Do NOT run Cleaner yet."
+    )
+
+    print(
+        "Inspect only the failed "
+        "NTRS documents above."
+    )
+
+    print("=" * 78)
+
+    raise RuntimeError(
+        "NTRS Core-100 Parser "
+        f"Gate failed: "
+        f"{success_count}/"
+        f"{EXPECTED_TOTAL} parsed."
     )
 
 

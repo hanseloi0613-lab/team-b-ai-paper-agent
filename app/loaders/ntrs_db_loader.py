@@ -4,15 +4,133 @@ from pathlib import Path
 from typing import Any
 
 import psycopg
-from psycopg import sql
 from psycopg.types.json import Jsonb
 
 from app.config import PROJECT_ROOT, settings
 
 
 # ============================================================
+# TEAM B - NASA NTRS Core-100 DB Loader
+# ============================================================
+#
+# Current AWS RDS:
+#
+#   arXiv : 50
+#   NTRS  : 15
+#   TOTAL : 65
+#
+#
+# Add selected NTRS:
+#
+#   rover_autonomy       +12
+#   onboard_ai           +12
+#   satellite_autonomy   +11
+#   ------------------------
+#   TOTAL                +35
+#
+#
+# Final Core-100:
+#
+#   arXiv : 50
+#   NTRS  : 50
+#   TOTAL : 100
+#
+#
+# Final axis distribution:
+#
+#   rover_autonomy       34
+#   onboard_ai           33
+#   satellite_autonomy   33
+#
+#
+# Safety:
+#
+# - frozen ntrs_core100_selected.json ONLY
+# - quality.passed == True required
+# - local SHA-256 duplicate check
+# - DB content_hash duplicate check
+# - schema validation
+# - full transaction
+# - verify before COMMIT
+# - no partial insert
+# ============================================================
+
+
+LOADER_VERSION = "core100_v1"
+
+
+# ============================================================
+# Database
+# ============================================================
+
+TABLE_SCHEMA = "public"
+TABLE_NAME = "core_documents"
+
+
+# ============================================================
+# Expected Selection
+# ============================================================
+
+EXPECTED_COUNTS = {
+    "rover_autonomy": 12,
+    "onboard_ai": 12,
+    "satellite_autonomy": 11,
+}
+
+EXPECTED_TOTAL = sum(
+    EXPECTED_COUNTS.values()
+)
+
+
+# ============================================================
+# Expected DB State
+# ============================================================
+
+EXPECTED_FIRST_RUN = {
+    "total": 65,
+    "arxiv": 50,
+    "ntrs": 15,
+}
+
+EXPECTED_FINAL = {
+    "total": 100,
+    "arxiv": 50,
+    "ntrs": 50,
+}
+
+
+EXPECTED_FINAL_SOURCE_AXIS = {
+    "arxiv": {
+        "rover_autonomy": 17,
+        "onboard_ai": 16,
+        "satellite_autonomy": 17,
+    },
+    "ntrs": {
+        "rover_autonomy": 17,
+        "onboard_ai": 17,
+        "satellite_autonomy": 16,
+    },
+}
+
+
+EXPECTED_FINAL_GLOBAL_AXIS = {
+    "rover_autonomy": 34,
+    "onboard_ai": 33,
+    "satellite_autonomy": 33,
+}
+
+
+# ============================================================
 # Paths
 # ============================================================
+
+SELECTION_FILE = (
+    PROJECT_ROOT
+    / "data"
+    / "selections"
+    / "ntrs_core100_selected.json"
+)
+
 
 RESOLVED_ROOT = (
     PROJECT_ROOT
@@ -21,52 +139,50 @@ RESOLVED_ROOT = (
     / "ntrs_resolved"
 )
 
+
 REPORT_DIR = (
     PROJECT_ROOT
     / "data"
     / "reports"
 )
 
+
 REPORT_FILE = (
     REPORT_DIR
-    / "ntrs_db_loading_report.json"
+    / "ntrs_core100_db_loading_report.json"
 )
 
 
 # ============================================================
-# Database
-# ============================================================
-
-DB_SCHEMA = "public"
-DB_TABLE = "core_documents"
-
-
-# ============================================================
-# Expected Core Columns
-# ============================================================
-#
-# 이 loader는 현재 프로젝트의 canonical core_documents
-# schema를 대상으로 한다.
-#
-# information_schema를 읽어서 실제 DB column type도
-# 확인하므로 authors/categories/metadata가
-# JSONB / ARRAY / TEXT 중 무엇인지에 맞춰 값을 변환한다.
+# Required DB Columns
 # ============================================================
 
 REQUIRED_COLUMNS = {
     "source",
     "source_id",
     "title",
+    "abstract",
+    "authors",
+    "categories",
+    "published_at",
+    "document_type",
+    "doi",
+    "url",
+    "pdf_url",
     "topic_axis",
     "language",
     "raw_content",
     "clean_content",
     "content_hash",
+    "normalization_version",
+    "char_count",
+    "parse_status",
+    "metadata",
 }
 
 
 # ============================================================
-# JSON Helpers
+# JSON
 # ============================================================
 
 def _load_json(
@@ -108,167 +224,641 @@ def _save_json(
 
 
 # ============================================================
-# Text Helper
+# Selection Manifest
 # ============================================================
 
-def _read_text(
-    path: Path,
-) -> str:
+def _load_selection() -> tuple[
+    dict[str, list[str]],
+    dict[str, dict[str, dict]],
+]:
 
-    if not path.exists():
+    payload = (
+        _load_json(
+            SELECTION_FILE
+        )
+    )
 
-        raise FileNotFoundError(
-            f"Text file not found: {path}"
+    # --------------------------------------------------------
+    # Version
+    # --------------------------------------------------------
+
+    version = (
+        payload.get(
+            "selection_version"
+        )
+    )
+
+    if (
+        version is not None
+        and version != LOADER_VERSION
+    ):
+
+        raise RuntimeError(
+            "Selection version mismatch.\n"
+            f"Expected: {LOADER_VERSION}\n"
+            f"Found   : {version}"
         )
 
-    return path.read_text(
-        encoding="utf-8",
-        errors="replace",
-    ).strip()
+    # --------------------------------------------------------
+    # Source
+    # --------------------------------------------------------
+
+    source = str(
+        payload.get(
+            "source",
+            "",
+        )
+    ).strip().lower()
+
+    if (
+        source
+        and source != "ntrs"
+    ):
+
+        raise RuntimeError(
+            f"Unexpected selection source: "
+            f"{source}"
+        )
+
+    # --------------------------------------------------------
+    # Canonical ID list
+    # --------------------------------------------------------
+
+    selected_documents = (
+        payload.get(
+            "selected_documents"
+        )
+    )
+
+    if not isinstance(
+        selected_documents,
+        dict,
+    ):
+
+        raise RuntimeError(
+            "selected_documents missing."
+        )
+
+    # --------------------------------------------------------
+    # Frozen metadata snapshots
+    # --------------------------------------------------------
+
+    selected_records = (
+        payload.get(
+            "selected_records"
+        )
+    )
+
+    if not isinstance(
+        selected_records,
+        dict,
+    ):
+
+        raise RuntimeError(
+            "selected_records missing."
+        )
+
+    selection = {}
+
+    metadata_index = {}
+
+    global_ids = set()
+
+    for (
+        topic_axis,
+        expected_count,
+    ) in EXPECTED_COUNTS.items():
+
+        ids = (
+            selected_documents.get(
+                topic_axis
+            )
+        )
+
+        records = (
+            selected_records.get(
+                topic_axis
+            )
+        )
+
+        if not isinstance(
+            ids,
+            list,
+        ):
+
+            raise RuntimeError(
+                f"{topic_axis}: "
+                "selected ID list missing."
+            )
+
+        if not isinstance(
+            records,
+            list,
+        ):
+
+            raise RuntimeError(
+                f"{topic_axis}: "
+                "selected metadata records missing."
+            )
+
+        if len(ids) != expected_count:
+
+            raise RuntimeError(
+                f"{topic_axis}: expected "
+                f"{expected_count}, "
+                f"found {len(ids)}."
+            )
+
+        if len(records) != expected_count:
+
+            raise RuntimeError(
+                f"{topic_axis}: metadata expected "
+                f"{expected_count}, "
+                f"found {len(records)}."
+            )
+
+        record_index = {}
+
+        for record in records:
+
+            if not isinstance(
+                record,
+                dict,
+            ):
+
+                raise RuntimeError(
+                    f"{topic_axis}: invalid metadata."
+                )
+
+            source_id = str(
+                record.get(
+                    "source_id",
+                    "",
+                )
+            ).strip()
+
+            if not source_id:
+
+                raise RuntimeError(
+                    f"{topic_axis}: metadata source_id missing."
+                )
+
+            record_index[
+                source_id
+            ] = record
+
+        normalized_ids = []
+
+        for raw_source_id in ids:
+
+            source_id = str(
+                raw_source_id
+            ).strip()
+
+            if not source_id:
+
+                raise RuntimeError(
+                    f"{topic_axis}: empty source_id."
+                )
+
+            if source_id in global_ids:
+
+                raise RuntimeError(
+                    "Cross-axis duplicate NTRS ID: "
+                    f"{source_id}"
+                )
+
+            global_ids.add(
+                source_id
+            )
+
+            if source_id not in record_index:
+
+                raise RuntimeError(
+                    f"{source_id}: "
+                    "metadata snapshot missing."
+                )
+
+            metadata = (
+                record_index[
+                    source_id
+                ]
+            )
+
+            metadata_axis = str(
+                metadata.get(
+                    "topic_axis",
+                    "",
+                )
+            )
+
+            if (
+                metadata_axis
+                and metadata_axis
+                != topic_axis
+            ):
+
+                raise RuntimeError(
+                    f"{source_id}: "
+                    f"metadata axis mismatch: "
+                    f"{metadata_axis}"
+                )
+
+            normalized_ids.append(
+                source_id
+            )
+
+            metadata_index[
+                source_id
+            ] = metadata
+
+        selection[
+            topic_axis
+        ] = normalized_ids
+
+    total = sum(
+        len(
+            source_ids
+        )
+        for source_ids
+        in selection.values()
+    )
+
+    if total != EXPECTED_TOTAL:
+
+        raise RuntimeError(
+            f"Expected {EXPECTED_TOTAL} selected "
+            f"NTRS papers, found {total}."
+        )
+
+    return (
+        selection,
+        metadata_index,
+    )
 
 
 # ============================================================
-# Date Helper
+# Date
 # ============================================================
 
 def _parse_date(
-    value: Any,
+    value: str | None,
 ) -> date | None:
 
-    if value is None:
+    if not value:
 
         return None
 
-    if isinstance(
-        value,
-        date,
-    ):
-
-        return value
-
-    text = str(
-        value
-    ).strip()
-
-    if not text:
-
-        return None
-
-    # 2024-01-01T00:00:00Z
-    #               ↓
-    # 2024-01-01
     try:
 
         return date.fromisoformat(
-            text[:10]
+            str(
+                value
+            )[:10]
         )
 
     except ValueError:
 
-        print(
-            f"[WARN] Invalid date ignored: "
-            f"{value}"
-        )
-
         return None
 
 
 # ============================================================
-# Clean Local Path From Provenance
+# Cleaned Document Paths
 # ============================================================
 
-def _clean_resolution_for_db(
-    resolution: dict,
-) -> dict:
-    """
-    resolution.json에는 로컬 Windows 경로가 들어갈 수 있다.
+def _find_cleaned_documents(
+    selection: dict[
+        str,
+        list[str],
+    ],
+) -> list[
+    tuple[
+        str,
+        str,
+        Path,
+    ]
+]:
 
-    AWS DB provenance에:
+    documents = []
 
-        E:\\자료실\\...
+    errors = []
 
-    같은 개발 PC 경로까지 넣을 필요는 없다.
+    for topic_axis in EXPECTED_COUNTS:
 
-    따라서 source URL / selected format / quality 등은
-    보존하고 local_file 계열만 제거한다.
-    """
+        for source_id in (
+            selection[
+                topic_axis
+            ]
+        ):
 
-    cleaned = dict(
-        resolution
-    )
+            paper_dir = (
+                RESOLVED_ROOT
+                / topic_axis
+                / source_id
+            )
 
-    cleaned.pop(
-        "local_file",
-        None,
-    )
+            cleaned_path = (
+                paper_dir
+                / "cleaned_document.json"
+            )
 
-    cleaned.pop(
-        "original_file",
-        None,
-    )
+            raw_path = (
+                paper_dir
+                / "raw_content.txt"
+            )
 
-    return cleaned
+            clean_path = (
+                paper_dir
+                / "clean_content.txt"
+            )
 
+            resolution_path = (
+                paper_dir
+                / "resolution.json"
+            )
 
-# ============================================================
-# Find Local Documents
-# ============================================================
+            for path in (
+                cleaned_path,
+                raw_path,
+                clean_path,
+                resolution_path,
+            ):
 
-def _find_cleaned_documents() -> list[Path]:
+                if not path.exists():
 
-    if not RESOLVED_ROOT.exists():
+                    errors.append(
+                        (
+                            topic_axis,
+                            source_id,
+                            f"missing: {path.name}",
+                        )
+                    )
 
-        raise FileNotFoundError(
-            f"NTRS resolved root not found: "
-            f"{RESOLVED_ROOT}"
+            if (
+                cleaned_path.exists()
+                and raw_path.exists()
+                and clean_path.exists()
+                and resolution_path.exists()
+            ):
+
+                documents.append(
+                    (
+                        topic_axis,
+                        source_id,
+                        cleaned_path,
+                    )
+                )
+
+    if errors:
+
+        print()
+
+        print(
+            "Local preflight errors:"
         )
 
-    return sorted(
-        RESOLVED_ROOT.glob(
-            "*/*/cleaned_document.json"
+        for (
+            topic_axis,
+            source_id,
+            error,
+        ) in errors:
+
+            print(
+                f"  {topic_axis} / "
+                f"{source_id}"
+            )
+
+            print(
+                f"    -> {error}"
+            )
+
+        raise RuntimeError(
+            f"{len(errors)} local "
+            "file error(s)."
         )
+
+    if (
+        len(documents)
+        != EXPECTED_TOTAL
+    ):
+
+        raise RuntimeError(
+            f"Expected {EXPECTED_TOTAL} "
+            f"cleaned documents, "
+            f"found {len(documents)}."
+        )
+
+    return documents
+
+
+# ============================================================
+# PostgreSQL Schema
+# ============================================================
+
+def _get_column_info(
+    conn: psycopg.Connection,
+) -> dict[str, dict]:
+
+    sql = """
+    SELECT
+        column_name,
+        data_type,
+        udt_name,
+        is_nullable,
+        column_default
+    FROM information_schema.columns
+    WHERE table_schema = %s
+      AND table_name = %s
+    ORDER BY ordinal_position
+    """
+
+    with conn.cursor() as cur:
+
+        cur.execute(
+            sql,
+            (
+                TABLE_SCHEMA,
+                TABLE_NAME,
+            ),
+        )
+
+        rows = (
+            cur.fetchall()
+        )
+
+    if not rows:
+
+        raise RuntimeError(
+            f"Table not found: "
+            f"{TABLE_SCHEMA}.{TABLE_NAME}"
+        )
+
+    result = {}
+
+    for (
+        column_name,
+        data_type,
+        udt_name,
+        is_nullable,
+        column_default,
+    ) in rows:
+
+        result[
+            column_name
+        ] = {
+            "data_type": (
+                data_type
+            ),
+            "udt_name": (
+                udt_name
+            ),
+            "is_nullable": (
+                is_nullable
+            ),
+            "column_default": (
+                column_default
+            ),
+        }
+
+    return result
+
+
+def _validate_schema(
+    column_info: dict[str, dict],
+) -> None:
+
+    missing = (
+        REQUIRED_COLUMNS
+        - set(
+            column_info.keys()
+        )
+    )
+
+    if missing:
+
+        raise RuntimeError(
+            "core_documents schema mismatch.\n"
+            f"Missing columns: "
+            f"{', '.join(sorted(missing))}"
+        )
+
+
+# ============================================================
+# PostgreSQL Type Adaptation
+# ============================================================
+
+def _adapt_collection(
+    value: list | dict,
+    column: dict,
+) -> Any:
+
+    data_type = str(
+        column.get(
+            "data_type",
+            "",
+        )
+        or ""
+    ).lower()
+
+    udt_name = str(
+        column.get(
+            "udt_name",
+            "",
+        )
+        or ""
+    ).lower()
+
+    if data_type in {
+        "json",
+        "jsonb",
+    }:
+
+        return Jsonb(
+            value
+        )
+
+    if (
+        data_type == "array"
+        or udt_name.startswith(
+            "_"
+        )
+    ):
+
+        if isinstance(
+            value,
+            list,
+        ):
+
+            return value
+
+        return [
+            str(
+                value
+            )
+        ]
+
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        default=str,
     )
 
 
 # ============================================================
-# Build One Canonical DB Document
+# Parser Name
+# ============================================================
+
+def _parser_name(
+    source_info: dict,
+) -> str:
+
+    parser_mode = str(
+        source_info.get(
+            "parser_mode",
+            "",
+        )
+    )
+
+    if parser_mode:
+
+        return parser_mode
+
+    selected_format = str(
+        source_info.get(
+            "selected_format",
+            "",
+        )
+    ).lower()
+
+    if selected_format in {
+        "txt",
+        "original_text",
+    }:
+
+        return "ntrs_txt"
+
+    if selected_format == "pdf":
+
+        return "ntrs_pdf_pypdf"
+
+    return "ntrs_parser_unknown"
+
+
+# ============================================================
+# Build One DB Document
 # ============================================================
 
 def _build_document(
+    *,
+    topic_axis: str,
+    source_id: str,
     cleaned_path: Path,
+    metadata: dict,
 ) -> dict:
 
     paper_dir = (
         cleaned_path.parent
     )
-
-    # ========================================================
-    # Required Files
-    # ========================================================
-
-    metadata_path = (
-        paper_dir
-        / "metadata.json"
-    )
-
-    resolution_path = (
-        paper_dir
-        / "resolution.json"
-    )
-
-    raw_path = (
-        paper_dir
-        / "raw_content.txt"
-    )
-
-    clean_path = (
-        paper_dir
-        / "clean_content.txt"
-    )
-
-    # ========================================================
-    # Load
-    # ========================================================
 
     cleaned = (
         _load_json(
@@ -276,32 +866,82 @@ def _build_document(
         )
     )
 
-    metadata = (
+    resolution = (
         _load_json(
-            metadata_path
+            paper_dir
+            / "resolution.json"
         )
     )
 
-    resolution = (
+    parsed = (
         _load_json(
-            resolution_path
+            paper_dir
+            / "parsed_document.json"
         )
     )
 
     raw_content = (
-        _read_text(
-            raw_path
+        (
+            paper_dir
+            / "raw_content.txt"
+        )
+        .read_text(
+            encoding="utf-8",
+            errors="replace",
         )
     )
 
     clean_content = (
-        _read_text(
-            clean_path
+        (
+            paper_dir
+            / "clean_content.txt"
+        )
+        .read_text(
+            encoding="utf-8",
+            errors="replace",
         )
     )
 
     # ========================================================
-    # Quality Gate
+    # Identity
+    # ========================================================
+
+    cleaned_source_id = str(
+        cleaned.get(
+            "source_id",
+            "",
+        )
+    ).strip()
+
+    cleaned_axis = str(
+        cleaned.get(
+            "topic_axis",
+            "",
+        )
+    ).strip()
+
+    if (
+        cleaned_source_id
+        != source_id
+    ):
+
+        raise RuntimeError(
+            f"{source_id}: cleaned source_id "
+            f"mismatch: {cleaned_source_id}"
+        )
+
+    if (
+        cleaned_axis
+        != topic_axis
+    ):
+
+        raise RuntimeError(
+            f"{source_id}: cleaned axis "
+            f"mismatch: {cleaned_axis}"
+        )
+
+    # ========================================================
+    # Quality
     # ========================================================
 
     quality = (
@@ -317,8 +957,7 @@ def _build_document(
     ):
 
         raise RuntimeError(
-            f"Invalid quality object: "
-            f"{cleaned_path}"
+            f"{source_id}: invalid quality."
         )
 
     if not quality.get(
@@ -327,154 +966,71 @@ def _build_document(
     ):
 
         raise RuntimeError(
-            "Quality check did not pass: "
-            f"{paper_dir}"
+            f"{source_id}: "
+            "quality.passed != True"
         )
 
     # ========================================================
-    # Hash Gate
+    # Content
     # ========================================================
 
-    content_hash = (
+    if not raw_content.strip():
+
+        raise RuntimeError(
+            f"{source_id}: "
+            "raw_content empty."
+        )
+
+    if not clean_content.strip():
+
+        raise RuntimeError(
+            f"{source_id}: "
+            "clean_content empty."
+        )
+
+    content_hash = str(
         cleaned.get(
-            "content_hash"
+            "content_hash",
+            "",
         )
-    )
+    ).strip()
 
     if not content_hash:
 
         raise RuntimeError(
-            f"content_hash missing: "
-            f"{cleaned_path}"
-        )
-
-    content_hash = str(
-        content_hash
-    ).strip()
-
-    if len(
-        content_hash
-    ) != 64:
-
-        raise RuntimeError(
-            f"Invalid SHA-256 hash: "
-            f"{content_hash}"
+            f"{source_id}: "
+            "content_hash missing."
         )
 
     # ========================================================
-    # Canonical Identity
+    # Hash Verification
+    #
+    # cleaned_document hash must match actual clean_content.txt
     # ========================================================
 
-    source_id = str(
-        cleaned.get(
-            "source_id"
-        )
-        or metadata.get(
-            "source_id"
-        )
-        or paper_dir.name
-    ).strip()
+    import hashlib
 
-    topic_axis = str(
-        cleaned.get(
-            "topic_axis"
+    actual_hash = (
+        hashlib.sha256(
+            clean_content.encode(
+                "utf-8"
+            )
         )
-        or metadata.get(
-            "topic_axis"
-        )
-        or paper_dir.parent.name
-    ).strip()
+        .hexdigest()
+    )
 
-    title = str(
-        cleaned.get(
-            "title"
-        )
-        or metadata.get(
-            "title"
-        )
-        or ""
-    ).strip()
-
-    abstract = str(
-        cleaned.get(
-            "abstract"
-        )
-        or metadata.get(
-            "abstract"
-        )
-        or ""
-    ).strip()
-
-    if not source_id:
+    if actual_hash != content_hash:
 
         raise RuntimeError(
-            f"source_id missing: "
-            f"{paper_dir}"
-        )
-
-    if not title:
-
-        raise RuntimeError(
-            f"title missing: "
-            f"{paper_dir}"
-        )
-
-    if topic_axis not in {
-        "rover_autonomy",
-        "onboard_ai",
-        "satellite_autonomy",
-    }:
-
-        raise RuntimeError(
-            f"Invalid topic_axis: "
-            f"{topic_axis}"
+            f"{source_id}: "
+            "clean_content SHA-256 mismatch."
         )
 
     # ========================================================
     # Metadata
     # ========================================================
 
-    authors = (
-        metadata.get(
-            "authors",
-            [],
-        )
-    )
-
-    if not isinstance(
-        authors,
-        list,
-    ):
-
-        authors = [
-            str(
-                authors
-            )
-        ]
-
-    categories = (
-        metadata.get(
-            "categories",
-            [],
-        )
-    )
-
-    if not isinstance(
-        categories,
-        list,
-    ):
-
-        categories = [
-            str(
-                categories
-            )
-        ]
-
-    # ========================================================
-    # Provenance
-    # ========================================================
-
-    collector_metadata = (
+    original_metadata = (
         metadata.get(
             "metadata",
             {},
@@ -482,105 +1038,118 @@ def _build_document(
     )
 
     if not isinstance(
-        collector_metadata,
+        original_metadata,
         dict,
     ):
 
-        collector_metadata = {
-            "raw_value": (
-                collector_metadata
+        original_metadata = {
+            "original_metadata": (
+                original_metadata
             )
         }
 
-    provenance = {
-        "provider": (
-            "NASA NTRS"
-        ),
+    source_info = (
+        parsed.get(
+            "source_info",
+            {},
+        )
+    )
 
-        "collection": {
-            "matched_queries": (
-                metadata.get(
-                    "matched_queries",
-                    [],
-                )
-            ),
+    if not isinstance(
+        source_info,
+        dict,
+    ):
 
-            "api_score": (
-                metadata.get(
-                    "api_score"
-                )
-            ),
+        source_info = {}
 
-            "distribution": (
-                metadata.get(
-                    "distribution"
-                )
-            ),
+    selected_format = (
+        resolution.get(
+            "selected_format"
+        )
+    )
 
-            "disseminated": (
-                metadata.get(
-                    "disseminated"
-                )
-            ),
+    db_metadata = {
+        **original_metadata,
 
-            "downloads_available": (
-                metadata.get(
-                    "downloads_available"
-                )
-            ),
-
-            "only_abstract": (
-                metadata.get(
-                    "only_abstract"
-                )
-            ),
-
-            "document_type_details": (
-                metadata.get(
-                    "document_type_details"
-                )
-            ),
-        },
-
-        "downloads": {
-            "fulltext_url": (
-                metadata.get(
-                    "fulltext_url"
-                )
-            ),
-
-            "original_url": (
-                metadata.get(
-                    "original_url"
-                )
-            ),
-
-            "pdf_url": (
-                metadata.get(
-                    "pdf_url"
-                )
-            ),
-
-            "items": (
-                metadata.get(
-                    "downloads",
-                    [],
-                )
-            ),
-        },
-
-        "content_resolution": (
-            _clean_resolution_for_db(
-                resolution
+        "matched_queries": (
+            metadata.get(
+                "matched_queries",
+                [],
             )
         ),
 
-        "cleaning": (
-            cleaned.get(
-                "cleaning",
+        "query_scores": (
+            metadata.get(
+                "query_scores",
                 {},
             )
         ),
+
+        "api_score_max": (
+            metadata.get(
+                "api_score_max"
+            )
+        ),
+
+        "distribution": (
+            metadata.get(
+                "distribution"
+            )
+        ),
+
+        "disseminated": (
+            metadata.get(
+                "disseminated"
+            )
+        ),
+
+        "downloads_available": (
+            metadata.get(
+                "downloads_available"
+            )
+        ),
+
+        "fulltext_url": (
+            metadata.get(
+                "fulltext_url"
+            )
+        ),
+
+        "original_url": (
+            metadata.get(
+                "original_url"
+            )
+        ),
+
+        "downloads": (
+            metadata.get(
+                "downloads",
+                [],
+            )
+        ),
+
+        "selection": (
+            metadata.get(
+                "selection",
+                {}
+            )
+        ),
+
+        "content_resolution": {
+            "selected_format": (
+                selected_format
+            ),
+            "source_url": (
+                resolution.get(
+                    "source_url"
+                )
+            ),
+            "repair": (
+                resolution.get(
+                    "repair"
+                )
+            ),
+        },
 
         "quality": (
             quality
@@ -593,36 +1162,78 @@ def _build_document(
             )
         ),
 
-        "source_metadata": (
-            collector_metadata
+        "cleaning": (
+            cleaned.get(
+                "cleaning",
+                {},
+            )
         ),
+
+        "pipeline": {
+            "selection": (
+                "ntrs_core100_selected"
+            ),
+            "parser": (
+                _parser_name(
+                    source_info
+                )
+            ),
+            "normalization_version": (
+                cleaned.get(
+                    "normalization_version"
+                )
+            ),
+            "loader": (
+                LOADER_VERSION
+            ),
+        },
     }
 
     # ========================================================
-    # Canonical Row
+    # Final DB Record
     # ========================================================
 
     return {
-        "source": "ntrs",
+        "source": (
+            "ntrs"
+        ),
 
         "source_id": (
             source_id
         ),
 
         "title": (
-            title
+            cleaned.get(
+                "title"
+            )
+            or metadata.get(
+                "title"
+            )
+            or ""
         ),
 
         "abstract": (
-            abstract
+            cleaned.get(
+                "abstract"
+            )
+            or metadata.get(
+                "abstract"
+            )
+            or ""
         ),
 
         "authors": (
-            authors
+            metadata.get(
+                "authors",
+                [],
+            )
         ),
 
         "categories": (
-            categories
+            metadata.get(
+                "categories",
+                [],
+            )
         ),
 
         "published_at": (
@@ -637,6 +1248,7 @@ def _build_document(
             metadata.get(
                 "document_type"
             )
+            or "NTRS_DOCUMENT"
         ),
 
         "doi": (
@@ -687,8 +1299,10 @@ def _build_document(
             or "v1"
         ),
 
-        "char_count": len(
-            clean_content
+        "char_count": (
+            len(
+                clean_content
+            )
         ),
 
         "parse_status": (
@@ -696,88 +1310,118 @@ def _build_document(
         ),
 
         "metadata": (
-            provenance
+            db_metadata
         ),
     }
 
 
 # ============================================================
-# Local Validation
+# Local Documents
 # ============================================================
 
-def _prepare_local_documents(
-    paths: list[Path],
+def _load_local_documents(
+    selection: dict[
+        str,
+        list[str],
+    ],
+    metadata_index: dict[
+        str,
+        dict,
+    ],
 ) -> list[dict]:
 
-    documents: list[
-        dict
-    ] = []
+    paths = (
+        _find_cleaned_documents(
+            selection
+        )
+    )
 
-    errors = []
+    documents = []
 
-    seen_source_ids = set()
-    seen_hashes = set()
+    print(
+        f"[LOCAL] Selected cleaned documents: "
+        f"{len(paths)}"
+    )
 
-    for path in paths:
+    for (
+        index,
+        (
+            topic_axis,
+            source_id,
+            cleaned_path,
+        ),
+    ) in enumerate(
+        paths,
+        start=1,
+    ):
 
-        try:
-
-            document = (
-                _build_document(
-                    path
-                )
+        metadata = (
+            metadata_index.get(
+                source_id
             )
-
-        except Exception as exc:
-
-            errors.append(
-                {
-                    "path": str(
-                        path
-                    ),
-
-                    "error": (
-                        f"{type(exc).__name__}: "
-                        f"{exc}"
-                    ),
-                }
-            )
-
-            continue
-
-        identity = (
-            document[
-                "source"
-            ],
-            document[
-                "source_id"
-            ],
         )
 
-        if (
-            identity
-            in seen_source_ids
-        ):
+        if metadata is None:
 
-            errors.append(
-                {
-                    "path": str(
-                        path
-                    ),
-
-                    "error": (
-                        "Duplicate local "
-                        "(source, source_id): "
-                        f"{identity}"
-                    ),
-                }
+            raise RuntimeError(
+                f"{source_id}: "
+                "metadata snapshot missing."
             )
 
-            continue
-
-        seen_source_ids.add(
-            identity
+        document = (
+            _build_document(
+                topic_axis=(
+                    topic_axis
+                ),
+                source_id=(
+                    source_id
+                ),
+                cleaned_path=(
+                    cleaned_path
+                ),
+                metadata=(
+                    metadata
+                ),
+            )
         )
+
+        documents.append(
+            document
+        )
+
+        print(
+            f"[LOCAL {index:02d}/"
+            f"{EXPECTED_TOTAL}] "
+            f"{topic_axis} | "
+            f"{source_id} | "
+            f"{document['char_count']} chars"
+        )
+
+    if (
+        len(documents)
+        != EXPECTED_TOTAL
+    ):
+
+        raise RuntimeError(
+            f"Expected {EXPECTED_TOTAL} "
+            f"DB documents, "
+            f"found {len(documents)}."
+        )
+
+    return documents
+
+
+# ============================================================
+# Local Hash QA
+# ============================================================
+
+def _validate_local_hashes(
+    documents: list[dict],
+) -> None:
+
+    seen = {}
+
+    for document in documents:
 
         digest = (
             document[
@@ -785,557 +1429,712 @@ def _prepare_local_documents(
             ]
         )
 
-        if (
+        source_id = (
+            document[
+                "source_id"
+            ]
+        )
+
+        if digest in seen:
+
+            raise RuntimeError(
+                "Local duplicate content hash:\n"
+                f"{seen[digest]} "
+                f"<-> {source_id}"
+            )
+
+        seen[
             digest
-            in seen_hashes
-        ):
-
-            errors.append(
-                {
-                    "path": str(
-                        path
-                    ),
-
-                    "error": (
-                        "Duplicate local "
-                        f"content_hash: {digest}"
-                    ),
-                }
-            )
-
-            continue
-
-        seen_hashes.add(
-            digest
-        )
-
-        documents.append(
-            document
-        )
-
-    # ========================================================
-    # All-or-nothing local gate
-    # ========================================================
-
-    if errors:
-
-        print()
-        print("=" * 70)
-
-        print(
-            "LOCAL VALIDATION FAILED"
-        )
-
-        print("=" * 70)
-
-        for item in errors:
-
-            print(
-                f"[ERROR] "
-                f"{item['path']}"
-            )
-
-            print(
-                f"        "
-                f"{item['error']}"
-            )
-
-        raise RuntimeError(
-            f"{len(errors)} local "
-            "document(s) failed validation."
-        )
-
-    return documents
+        ] = source_id
 
 
 # ============================================================
-# Schema Inspection
+# Counts
 # ============================================================
 
-def _get_table_columns(
-    cursor,
-) -> dict[str, dict]:
-
-    cursor.execute(
-        """
-        SELECT
-            column_name,
-            data_type,
-            udt_name,
-            is_nullable
-        FROM information_schema.columns
-        WHERE table_schema = %s
-          AND table_name = %s
-        ORDER BY ordinal_position
-        """,
-        (
-            DB_SCHEMA,
-            DB_TABLE,
-        ),
-    )
-
-    rows = (
-        cursor.fetchall()
-    )
-
-    if not rows:
-
-        raise RuntimeError(
-            f"Table not found: "
-            f"{DB_SCHEMA}.{DB_TABLE}"
-        )
-
-    columns = {}
-
-    for (
-        column_name,
-        data_type,
-        udt_name,
-        is_nullable,
-    ) in rows:
-
-        columns[
-            column_name
-        ] = {
-            "data_type": (
-                data_type
-            ),
-
-            "udt_name": (
-                udt_name
-            ),
-
-            "is_nullable": (
-                is_nullable
-            ),
-        }
-
-    return columns
-
-
-# ============================================================
-# Validate Schema
-# ============================================================
-
-def _validate_schema(
-    columns: dict[str, dict],
-) -> None:
-
-    missing = (
-        REQUIRED_COLUMNS
-        - set(
-            columns.keys()
-        )
-    )
-
-    if missing:
-
-        raise RuntimeError(
-            "core_documents is missing "
-            "required columns: "
-            + ", ".join(
-                sorted(
-                    missing
-                )
-            )
-        )
-
-
-# ============================================================
-# Adapt Python Value To Actual PostgreSQL Column
-# ============================================================
-
-def _adapt_value(
-    value: Any,
-    column_info: dict,
-) -> Any:
-
-    if value is None:
-
-        return None
-
-    data_type = str(
-        column_info.get(
-            "data_type",
-            "",
-        )
-    ).lower()
-
-    udt_name = str(
-        column_info.get(
-            "udt_name",
-            "",
-        )
-    ).lower()
-
-    # ========================================================
-    # JSON / JSONB
-    # ========================================================
-
-    if (
-        data_type
-        in {
-            "json",
-            "jsonb",
-        }
-        or udt_name
-        in {
-            "json",
-            "jsonb",
-        }
-    ):
-
-        return Jsonb(
-            value
-        )
-
-    # ========================================================
-    # PostgreSQL ARRAY
-    # ========================================================
-
-    if (
-        data_type
-        == "array"
-        or udt_name.startswith(
-            "_"
-        )
-    ):
-
-        if isinstance(
-            value,
-            list,
-        ):
-
-            return value
-
-        return [
-            value
-        ]
-
-    # ========================================================
-    # Text column but Python value is list/dict
-    # ========================================================
-
-    if isinstance(
-        value,
-        (
-            list,
-            dict,
-        ),
-    ):
-
-        return json.dumps(
-            value,
-            ensure_ascii=False,
-            default=str,
-        )
-
-    return value
-
-
-# ============================================================
-# Count Rows
-# ============================================================
-
-def _count_rows(
-    cursor,
+def _count_total(
+    conn: psycopg.Connection,
 ) -> int:
 
-    cursor.execute(
-        sql.SQL(
-            "SELECT COUNT(*) "
-            "FROM {}.{}"
-        ).format(
-            sql.Identifier(
-                DB_SCHEMA
-            ),
-            sql.Identifier(
-                DB_TABLE
-            ),
+    sql = f"""
+    SELECT COUNT(*)
+    FROM {TABLE_SCHEMA}.{TABLE_NAME}
+    """
+
+    with conn.cursor() as cur:
+
+        cur.execute(
+            sql
         )
-    )
+
+        row = (
+            cur.fetchone()
+        )
 
     return int(
-        cursor.fetchone()[0]
+        row[0]
     )
+
+
+def _count_source(
+    conn: psycopg.Connection,
+    source: str,
+) -> int:
+
+    sql = f"""
+    SELECT COUNT(*)
+    FROM {TABLE_SCHEMA}.{TABLE_NAME}
+    WHERE source = %s
+    """
+
+    with conn.cursor() as cur:
+
+        cur.execute(
+            sql,
+            (
+                source,
+            ),
+        )
+
+        row = (
+            cur.fetchone()
+        )
+
+    return int(
+        row[0]
+    )
+
+
+def _source_axis_counts(
+    conn: psycopg.Connection,
+) -> dict[
+    str,
+    dict[
+        str,
+        int,
+    ],
+]:
+
+    sql = f"""
+    SELECT
+        source,
+        topic_axis,
+        COUNT(*)
+    FROM {TABLE_SCHEMA}.{TABLE_NAME}
+    GROUP BY
+        source,
+        topic_axis
+    ORDER BY
+        source,
+        topic_axis
+    """
+
+    result = {}
+
+    with conn.cursor() as cur:
+
+        cur.execute(
+            sql
+        )
+
+        rows = (
+            cur.fetchall()
+        )
+
+    for (
+        source,
+        topic_axis,
+        count,
+    ) in rows:
+
+        result.setdefault(
+            str(
+                source
+            ),
+            {},
+        )[
+            str(
+                topic_axis
+            )
+        ] = int(
+            count
+        )
+
+    return result
+
+
+def _global_axis_counts(
+    conn: psycopg.Connection,
+) -> dict[
+    str,
+    int,
+]:
+
+    sql = f"""
+    SELECT
+        topic_axis,
+        COUNT(*)
+    FROM {TABLE_SCHEMA}.{TABLE_NAME}
+    GROUP BY topic_axis
+    ORDER BY topic_axis
+    """
+
+    result = {}
+
+    with conn.cursor() as cur:
+
+        cur.execute(
+            sql
+        )
+
+        rows = (
+            cur.fetchall()
+        )
+
+    for (
+        topic_axis,
+        count,
+    ) in rows:
+
+        result[
+            str(
+                topic_axis
+            )
+        ] = int(
+            count
+        )
+
+    return result
 
 
 # ============================================================
-# Find Existing By Source Identity
+# Existing Documents
 # ============================================================
 
 def _find_existing_source(
-    cursor,
+    conn: psycopg.Connection,
     source: str,
     source_id: str,
-) -> dict | None:
+) -> tuple[
+    int,
+    str,
+] | None:
 
-    cursor.execute(
-        sql.SQL(
-            """
-            SELECT
-                id,
+    sql = f"""
+    SELECT
+        id,
+        content_hash
+    FROM {TABLE_SCHEMA}.{TABLE_NAME}
+    WHERE source = %s
+      AND source_id = %s
+    LIMIT 1
+    """
+
+    with conn.cursor() as cur:
+
+        cur.execute(
+            sql,
+            (
                 source,
                 source_id,
-                content_hash
-            FROM {}.{}
-            WHERE source = %s
-              AND source_id = %s
-            LIMIT 1
-            """
-        ).format(
-            sql.Identifier(
-                DB_SCHEMA
             ),
-            sql.Identifier(
-                DB_TABLE
-            ),
-        ),
-        (
-            source,
-            source_id,
-        ),
-    )
+        )
 
-    row = (
-        cursor.fetchone()
-    )
+        row = (
+            cur.fetchone()
+        )
 
     if row is None:
 
         return None
 
-    return {
-        "id": (
+    return (
+        int(
             row[0]
         ),
-
-        "source": (
+        str(
             row[1]
         ),
-
-        "source_id": (
-            row[2]
-        ),
-
-        "content_hash": (
-            row[3]
-        ),
-    }
+    )
 
 
-# ============================================================
-# Find Existing Content Hash
-# ============================================================
-
-def _find_existing_hash(
-    cursor,
+def _find_hash_owner(
+    conn: psycopg.Connection,
     content_hash: str,
-) -> dict | None:
+) -> tuple[
+    int,
+    str,
+    str,
+] | None:
 
-    cursor.execute(
-        sql.SQL(
-            """
-            SELECT
-                id,
-                source,
-                source_id,
-                title,
-                content_hash
-            FROM {}.{}
-            WHERE content_hash = %s
-            LIMIT 1
-            """
-        ).format(
-            sql.Identifier(
-                DB_SCHEMA
-            ),
-            sql.Identifier(
-                DB_TABLE
-            ),
-        ),
-        (
-            content_hash,
-        ),
-    )
+    sql = f"""
+    SELECT
+        id,
+        source,
+        source_id
+    FROM {TABLE_SCHEMA}.{TABLE_NAME}
+    WHERE content_hash = %s
+    LIMIT 1
+    """
 
-    row = (
-        cursor.fetchone()
-    )
+    with conn.cursor() as cur:
+
+        cur.execute(
+            sql,
+            (
+                content_hash,
+            ),
+        )
+
+        row = (
+            cur.fetchone()
+        )
 
     if row is None:
 
         return None
 
-    return {
-        "id": (
+    return (
+        int(
             row[0]
         ),
-
-        "source": (
+        str(
             row[1]
         ),
-
-        "source_id": (
+        str(
             row[2]
         ),
-
-        "title": (
-            row[3]
-        ),
-
-        "content_hash": (
-            row[4]
-        ),
-    }
+    )
 
 
 # ============================================================
-# Build Dynamic UPSERT
+# DB Preflight
 # ============================================================
 
-def _upsert_document(
-    cursor,
-    document: dict,
-    columns: dict[str, dict],
-) -> int:
-    """
-    실제 DB에 존재하는 column만 INSERT한다.
+def _database_preflight(
+    conn: psycopg.Connection,
+    documents: list[dict],
+) -> dict:
 
-    UNIQUE(source, source_id)를 기준으로 UPSERT.
-
-    created_at은 건드리지 않고,
-    updated_at이 있다면 UPDATE 시 NOW() 처리한다.
-    """
-
-    insert_columns = [
-        column_name
-        for column_name in document.keys()
-        if column_name in columns
-    ]
-
-    if not insert_columns:
-
-        raise RuntimeError(
-            "No compatible database columns."
+    total = (
+        _count_total(
+            conn
         )
+    )
 
-    adapted_values = [
-        _adapt_value(
-            document[
-                column_name
-            ],
-            columns[
-                column_name
-            ],
+    arxiv = (
+        _count_source(
+            conn,
+            "arxiv",
         )
-        for column_name
-        in insert_columns
-    ]
+    )
 
-    # ========================================================
-    # UPDATE columns
-    # ========================================================
-
-    update_columns = [
-        column_name
-        for column_name
-        in insert_columns
-        if column_name
-        not in {
-            "source",
-            "source_id",
-        }
-    ]
-
-    update_parts = [
-        sql.SQL(
-            "{} = EXCLUDED.{}"
-        ).format(
-            sql.Identifier(
-                column_name
-            ),
-            sql.Identifier(
-                column_name
-            ),
+    ntrs = (
+        _count_source(
+            conn,
+            "ntrs",
         )
-        for column_name
-        in update_columns
-    ]
+    )
 
-    if (
-        "updated_at"
-        in columns
+    print()
+    print(
+        f"[DB] Rows before  : "
+        f"{total}"
+    )
+
+    print(
+        f"[DB] arXiv before : "
+        f"{arxiv}"
+    )
+
+    print(
+        f"[DB] NTRS before  : "
+        f"{ntrs}"
+    )
+
+    first_run = (
+        total
+        == EXPECTED_FIRST_RUN[
+            "total"
+        ]
+        and arxiv
+        == EXPECTED_FIRST_RUN[
+            "arxiv"
+        ]
+        and ntrs
+        == EXPECTED_FIRST_RUN[
+            "ntrs"
+        ]
+    )
+
+    completed_rerun = (
+        total
+        == EXPECTED_FINAL[
+            "total"
+        ]
+        and arxiv
+        == EXPECTED_FINAL[
+            "arxiv"
+        ]
+        and ntrs
+        == EXPECTED_FINAL[
+            "ntrs"
+        ]
+    )
+
+    if not (
+        first_run
+        or completed_rerun
     ):
 
-        update_parts.append(
-            sql.SQL(
-                "{} = NOW()"
-            ).format(
-                sql.Identifier(
-                    "updated_at"
-                )
+        raise RuntimeError(
+            "Unexpected AWS DB state.\n"
+            "Expected either:\n"
+            "  first run : total=65, "
+            "arxiv=50, ntrs=15\n"
+            "or\n"
+            "  rerun     : total=100, "
+            "arxiv=50, ntrs=50\n"
+            f"Actual      : total={total}, "
+            f"arxiv={arxiv}, ntrs={ntrs}"
+        )
+
+    if first_run:
+
+        print(
+            "[DB] Core-100 first-run "
+            "state detected."
+        )
+
+    else:
+
+        print(
+            "[DB] Completed Core-100 "
+            "rerun state detected."
+        )
+
+    existing_selected = 0
+
+    # ========================================================
+    # Verify ALL selected docs before mutation
+    # ========================================================
+
+    for document in documents:
+
+        source = (
+            document[
+                "source"
+            ]
+        )
+
+        source_id = (
+            document[
+                "source_id"
+            ]
+        )
+
+        content_hash = (
+            document[
+                "content_hash"
+            ]
+        )
+
+        existing = (
+            _find_existing_source(
+                conn,
+                source,
+                source_id,
             )
         )
 
-    query = (
-        sql.SQL(
-            """
-            INSERT INTO {}.{} ({})
-            VALUES ({})
-            ON CONFLICT (source, source_id)
-            DO UPDATE SET {}
-            RETURNING id
-            """
+        hash_owner = (
+            _find_hash_owner(
+                conn,
+                content_hash,
+            )
         )
-        .format(
-            sql.Identifier(
-                DB_SCHEMA
-            ),
 
-            sql.Identifier(
-                DB_TABLE
-            ),
+        # ----------------------------------------------------
+        # Existing source ID
+        # ----------------------------------------------------
 
-            sql.SQL(
-                ", "
-            ).join(
-                sql.Identifier(
-                    column_name
+        if existing is not None:
+
+            existing_selected += 1
+
+            (
+                _existing_id,
+                existing_hash,
+            ) = existing
+
+            if (
+                existing_hash
+                != content_hash
+            ):
+
+                raise RuntimeError(
+                    "Existing source_id has "
+                    "different content hash:\n"
+                    f"{source}/"
+                    f"{source_id}"
                 )
-                for column_name
-                in insert_columns
-            ),
 
-            sql.SQL(
-                ", "
-            ).join(
-                sql.Placeholder()
-                for _
-                in insert_columns
-            ),
+        # ----------------------------------------------------
+        # Hash belongs to another document
+        # ----------------------------------------------------
 
-            sql.SQL(
-                ", "
-            ).join(
-                update_parts
-            ),
+        if hash_owner is not None:
+
+            (
+                owner_id,
+                owner_source,
+                owner_source_id,
+            ) = hash_owner
+
+            same_document = (
+                owner_source
+                == source
+                and owner_source_id
+                == source_id
+            )
+
+            if not same_document:
+
+                raise RuntimeError(
+                    "DB content-hash collision:\n"
+                    f"Current  : "
+                    f"{source}/{source_id}\n"
+                    f"Existing : "
+                    f"{owner_source}/"
+                    f"{owner_source_id}\n"
+                    f"DB id    : "
+                    f"{owner_id}"
+                )
+
+    if first_run:
+
+        if existing_selected != 0:
+
+            raise RuntimeError(
+                "First-run state but some "
+                "selected NTRS IDs already exist: "
+                f"{existing_selected}"
+            )
+
+    if completed_rerun:
+
+        if (
+            existing_selected
+            != EXPECTED_TOTAL
+        ):
+
+            raise RuntimeError(
+                "Completed DB state detected "
+                "but not all selected NTRS "
+                "documents exist."
+            )
+
+    print(
+        "[DB] Preflight selected source IDs "
+        "and hashes: PASS"
+    )
+
+    return {
+        "total": (
+            total
+        ),
+        "arxiv": (
+            arxiv
+        ),
+        "ntrs": (
+            ntrs
+        ),
+        "first_run": (
+            first_run
+        ),
+    }
+
+
+# ============================================================
+# UPSERT
+# ============================================================
+
+def _upsert_document(
+    conn: psycopg.Connection,
+    document: dict,
+    column_info: dict[str, dict],
+) -> int:
+
+    authors = (
+        _adapt_collection(
+            document[
+                "authors"
+            ],
+            column_info[
+                "authors"
+            ],
         )
     )
 
-    cursor.execute(
-        query,
-        adapted_values,
+    categories = (
+        _adapt_collection(
+            document[
+                "categories"
+            ],
+            column_info[
+                "categories"
+            ],
+        )
     )
 
-    row = (
-        cursor.fetchone()
+    metadata = (
+        _adapt_collection(
+            document[
+                "metadata"
+            ],
+            column_info[
+                "metadata"
+            ],
+        )
     )
+
+    update_timestamp = ""
+
+    if "updated_at" in column_info:
+
+        update_timestamp = """
+            updated_at = NOW(),
+        """
+
+    sql = f"""
+    INSERT INTO {TABLE_SCHEMA}.{TABLE_NAME} (
+        source,
+        source_id,
+        title,
+        abstract,
+        authors,
+        categories,
+        published_at,
+        document_type,
+        doi,
+        url,
+        pdf_url,
+        topic_axis,
+        language,
+        raw_content,
+        clean_content,
+        content_hash,
+        normalization_version,
+        char_count,
+        parse_status,
+        metadata
+    )
+    VALUES (
+        %s, %s, %s, %s, %s,
+        %s, %s, %s, %s, %s,
+        %s, %s, %s, %s, %s,
+        %s, %s, %s, %s, %s
+    )
+
+    ON CONFLICT (source, source_id)
+
+    DO UPDATE SET
+        title = EXCLUDED.title,
+        abstract = EXCLUDED.abstract,
+        authors = EXCLUDED.authors,
+        categories = EXCLUDED.categories,
+        published_at = EXCLUDED.published_at,
+        document_type = EXCLUDED.document_type,
+        doi = EXCLUDED.doi,
+        url = EXCLUDED.url,
+        pdf_url = EXCLUDED.pdf_url,
+        topic_axis = EXCLUDED.topic_axis,
+        language = EXCLUDED.language,
+        raw_content = EXCLUDED.raw_content,
+        clean_content = EXCLUDED.clean_content,
+        content_hash = EXCLUDED.content_hash,
+        normalization_version = EXCLUDED.normalization_version,
+        char_count = EXCLUDED.char_count,
+        parse_status = EXCLUDED.parse_status,
+        {update_timestamp}
+        metadata = EXCLUDED.metadata
+
+    RETURNING id
+    """
+
+    values = (
+        document[
+            "source"
+        ],
+        document[
+            "source_id"
+        ],
+        document[
+            "title"
+        ],
+        document[
+            "abstract"
+        ],
+        authors,
+        categories,
+        document[
+            "published_at"
+        ],
+        document[
+            "document_type"
+        ],
+        document[
+            "doi"
+        ],
+        document[
+            "url"
+        ],
+        document[
+            "pdf_url"
+        ],
+        document[
+            "topic_axis"
+        ],
+        document[
+            "language"
+        ],
+        document[
+            "raw_content"
+        ],
+        document[
+            "clean_content"
+        ],
+        document[
+            "content_hash"
+        ],
+        document[
+            "normalization_version"
+        ],
+        document[
+            "char_count"
+        ],
+        document[
+            "parse_status"
+        ],
+        metadata,
+    )
+
+    with conn.cursor() as cur:
+
+        cur.execute(
+            sql,
+            values,
+        )
+
+        row = (
+            cur.fetchone()
+        )
 
     if row is None:
 
         raise RuntimeError(
-            "UPSERT returned no id."
+            "UPSERT did not return DB id: "
+            f"{document['source_id']}"
         )
 
     return int(
@@ -1344,63 +2143,372 @@ def _upsert_document(
 
 
 # ============================================================
-# Database Summary
+# Verify Selected 35
 # ============================================================
 
-def _get_database_summary(
-    cursor,
-) -> list[dict]:
+def _verify_selected_documents(
+    conn: psycopg.Connection,
+    documents: list[dict],
+) -> dict:
 
-    cursor.execute(
-        sql.SQL(
-            """
-            SELECT
-                source,
-                topic_axis,
-                COUNT(*) AS document_count
-            FROM {}.{}
-            GROUP BY
-                source,
-                topic_axis
-            ORDER BY
-                source,
-                topic_axis
-            """
-        ).format(
-            sql.Identifier(
-                DB_SCHEMA
-            ),
-            sql.Identifier(
-                DB_TABLE
-            ),
+    missing = []
+
+    hash_mismatch = []
+
+    axis_mismatch = []
+
+    for document in documents:
+
+        sql = f"""
+        SELECT
+            id,
+            content_hash,
+            topic_axis
+        FROM {TABLE_SCHEMA}.{TABLE_NAME}
+        WHERE source = %s
+          AND source_id = %s
+        LIMIT 1
+        """
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                sql,
+                (
+                    document[
+                        "source"
+                    ],
+                    document[
+                        "source_id"
+                    ],
+                ),
+            )
+
+            row = (
+                cur.fetchone()
+            )
+
+        if row is None:
+
+            missing.append(
+                document[
+                    "source_id"
+                ]
+            )
+
+            continue
+
+        (
+            _db_id,
+            db_hash,
+            db_axis,
+        ) = row
+
+        if (
+            str(
+                db_hash
+            )
+            != document[
+                "content_hash"
+            ]
+        ):
+
+            hash_mismatch.append(
+                document[
+                    "source_id"
+                ]
+            )
+
+        if (
+            str(
+                db_axis
+            )
+            != document[
+                "topic_axis"
+            ]
+        ):
+
+            axis_mismatch.append(
+                document[
+                    "source_id"
+                ]
+            )
+
+    verified = (
+        len(
+            documents
+        )
+        - len(
+            missing
+        )
+        - len(
+            hash_mismatch
+        )
+        - len(
+            axis_mismatch
         )
     )
 
-    result = []
+    return {
+        "total": (
+            len(
+                documents
+            )
+        ),
+        "verified": (
+            verified
+        ),
+        "missing": (
+            missing
+        ),
+        "hash_mismatch": (
+            hash_mismatch
+        ),
+        "axis_mismatch": (
+            axis_mismatch
+        ),
+    }
+
+
+# ============================================================
+# Final Core-100 Distribution Gate
+# ============================================================
+
+def _validate_final_distribution(
+    conn: psycopg.Connection,
+) -> dict:
+
+    total = (
+        _count_total(
+            conn
+        )
+    )
+
+    arxiv = (
+        _count_source(
+            conn,
+            "arxiv",
+        )
+    )
+
+    ntrs = (
+        _count_source(
+            conn,
+            "ntrs",
+        )
+    )
+
+    source_axis = (
+        _source_axis_counts(
+            conn
+        )
+    )
+
+    global_axis = (
+        _global_axis_counts(
+            conn
+        )
+    )
+
+    if total != 100:
+
+        raise RuntimeError(
+            f"Final total expected 100, "
+            f"found {total}."
+        )
+
+    if arxiv != 50:
+
+        raise RuntimeError(
+            f"Final arXiv expected 50, "
+            f"found {arxiv}."
+        )
+
+    if ntrs != 50:
+
+        raise RuntimeError(
+            f"Final NTRS expected 50, "
+            f"found {ntrs}."
+        )
+
+    # ========================================================
+    # Source × Axis
+    # ========================================================
 
     for (
         source,
-        topic_axis,
-        count,
-    ) in cursor.fetchall():
+        expected_axes,
+    ) in (
+        EXPECTED_FINAL_SOURCE_AXIS.items()
+    ):
 
-        result.append(
-            {
-                "source": (
-                    source
-                ),
-
-                "topic_axis": (
-                    topic_axis
-                ),
-
-                "count": int(
-                    count
-                ),
-            }
+        actual_axes = (
+            source_axis.get(
+                source,
+                {},
+            )
         )
 
-    return result
+        for (
+            topic_axis,
+            expected_count,
+        ) in expected_axes.items():
+
+            actual_count = (
+                actual_axes.get(
+                    topic_axis,
+                    0,
+                )
+            )
+
+            if (
+                actual_count
+                != expected_count
+            ):
+
+                raise RuntimeError(
+                    "Source/axis distribution "
+                    "mismatch:\n"
+                    f"{source} / "
+                    f"{topic_axis}\n"
+                    f"Expected: "
+                    f"{expected_count}\n"
+                    f"Actual  : "
+                    f"{actual_count}"
+                )
+
+    # ========================================================
+    # Global Axis
+    # ========================================================
+
+    for (
+        topic_axis,
+        expected_count,
+    ) in (
+        EXPECTED_FINAL_GLOBAL_AXIS.items()
+    ):
+
+        actual_count = (
+            global_axis.get(
+                topic_axis,
+                0,
+            )
+        )
+
+        if (
+            actual_count
+            != expected_count
+        ):
+
+            raise RuntimeError(
+                "Global axis distribution "
+                "mismatch:\n"
+                f"{topic_axis}: "
+                f"expected "
+                f"{expected_count}, "
+                f"found "
+                f"{actual_count}"
+            )
+
+    return {
+        "total": (
+            total
+        ),
+        "arxiv": (
+            arxiv
+        ),
+        "ntrs": (
+            ntrs
+        ),
+        "source_axis": (
+            source_axis
+        ),
+        "global_axis": (
+            global_axis
+        ),
+    }
+
+
+# ============================================================
+# Print DB Summary
+# ============================================================
+
+def _print_database_summary(
+    final_state: dict,
+) -> None:
+
+    print()
+    print("=" * 78)
+
+    print(
+        "FINAL CORE-100 DATABASE SUMMARY"
+    )
+
+    print("=" * 78)
+
+    source_axis = (
+        final_state[
+            "source_axis"
+        ]
+    )
+
+    for source in (
+        "arxiv",
+        "ntrs",
+    ):
+
+        axes = (
+            source_axis.get(
+                source,
+                {},
+            )
+        )
+
+        for topic_axis in (
+            "rover_autonomy",
+            "onboard_ai",
+            "satellite_autonomy",
+        ):
+
+            print(
+                f"{source:10} | "
+                f"{topic_axis:22} | "
+                f"{axes.get(topic_axis, 0)}"
+            )
+
+    print("-" * 78)
+
+    print(
+        f"TOTAL documents          : "
+        f"{final_state['total']}"
+    )
+
+    print(
+        f"arXiv documents          : "
+        f"{final_state['arxiv']}"
+    )
+
+    print(
+        f"NTRS documents           : "
+        f"{final_state['ntrs']}"
+    )
+
+    print()
+
+    print(
+        "Global axis totals:"
+    )
+
+    for topic_axis in (
+        "rover_autonomy",
+        "onboard_ai",
+        "satellite_autonomy",
+    ):
+
+        print(
+            f"  {topic_axis:22} : "
+            f"{final_state['global_axis'].get(topic_axis, 0)}"
+        )
 
 
 # ============================================================
@@ -1410,98 +2518,95 @@ def _get_database_summary(
 def main():
 
     print()
-    print("=" * 70)
+    print("=" * 78)
 
     print(
-        "TEAM B - NASA NTRS DB Loader"
+        "TEAM B - NASA NTRS "
+        "Core-100 DB Loader"
     )
 
-    print("=" * 70)
+    print("=" * 78)
+
+    print(
+        f"Version        : "
+        f"{LOADER_VERSION}"
+    )
+
+    print(
+        f"Selection file : "
+        f"{SELECTION_FILE}"
+    )
+
+    print(
+        f"Resolved root  : "
+        f"{RESOLVED_ROOT}"
+    )
+
+    print(
+        f"Report         : "
+        f"{REPORT_FILE}"
+    )
 
     # ========================================================
-    # 1. Local Documents
+    # Local Preflight
     # ========================================================
 
-    cleaned_paths = (
-        _find_cleaned_documents()
+    (
+        selection,
+        metadata_index,
+    ) = (
+        _load_selection()
     )
 
+    print()
     print(
-        f"[LOCAL] Cleaned documents: "
-        f"{len(cleaned_paths)}"
+        "Frozen NTRS selection:"
     )
 
-    if not cleaned_paths:
+    for (
+        topic_axis,
+        expected_count,
+    ) in EXPECTED_COUNTS.items():
 
         print(
-            "[STOP] "
-            "No cleaned NTRS documents found."
+            f"  {topic_axis:22} : "
+            f"{len(selection[topic_axis])} / "
+            f"{expected_count}"
         )
-
-        return
-
-    try:
-
-        documents = (
-            _prepare_local_documents(
-                cleaned_paths
-            )
-        )
-
-    except Exception as exc:
-
-        print()
-        print(
-            f"[STOP] "
-            f"{type(exc).__name__}: "
-            f"{exc}"
-        )
-
-        return
 
     print(
-        f"[LOCAL] Ready for DB: "
-        f"{len(documents)}"
+        f"  {'TOTAL':22} : "
+        f"{sum(len(x) for x in selection.values())}"
     )
 
-    # 파일럿은 반드시 15편이어야 한다.
-    if len(
+    documents = (
+        _load_local_documents(
+            selection,
+            metadata_index,
+        )
+    )
+
+    _validate_local_hashes(
         documents
-    ) != 15:
+    )
 
-        print()
-        print(
-            "[STOP] Expected exactly "
-            "15 NTRS pilot documents."
-        )
-
-        print(
-            f"[STOP] Found: "
-            f"{len(documents)}"
-        )
-
-        return
+    print()
+    print(
+        "[LOCAL] All 35 selected NTRS "
+        "documents passed preflight."
+    )
 
     # ========================================================
-    # Counters
+    # AWS
     # ========================================================
 
-    inserted = 0
-    updated = 0
-    duplicates = 0
-    failed = 0
+    inserted_count = 0
 
-    duplicate_items = []
-    loaded_items = []
+    updated_count = 0
 
-    rows_before = 0
-    rows_after = 0
+    failed_count = 0
 
-    db_summary = []
-
-    # ========================================================
-    # 2. AWS RDS
-    # ========================================================
+    results = []
 
     print()
     print(
@@ -1519,314 +2624,431 @@ def main():
             )
 
             # =================================================
-            # One transaction:
-            #
-            # 15개 중 하나라도 DB write 자체가 실패하면
-            # 전부 rollback.
+            # Schema
             # =================================================
 
-            with conn.transaction():
+            column_info = (
+                _get_column_info(
+                    conn
+                )
+            )
 
-                with conn.cursor() as cursor:
+            _validate_schema(
+                column_info
+            )
 
-                    # =========================================
-                    # Schema
-                    # =========================================
+            print(
+                "[DB] core_documents schema OK."
+            )
 
-                    columns = (
-                        _get_table_columns(
-                            cursor
+            # =================================================
+            # Full DB Preflight BEFORE mutation
+            # =================================================
+
+            before_state = (
+                _database_preflight(
+                    conn,
+                    documents,
+                )
+            )
+
+            # =================================================
+            # UPSERT
+            # =================================================
+
+            for (
+                index,
+                document,
+            ) in enumerate(
+                documents,
+                start=1,
+            ):
+
+                source = (
+                    document[
+                        "source"
+                    ]
+                )
+
+                source_id = (
+                    document[
+                        "source_id"
+                    ]
+                )
+
+                existing = (
+                    _find_existing_source(
+                        conn,
+                        source,
+                        source_id,
+                    )
+                )
+
+                print()
+                print("-" * 78)
+
+                print(
+                    f"[{index}/"
+                    f"{EXPECTED_TOTAL}] "
+                    f"{document['topic_axis']}"
+                )
+
+                print(
+                    f"[ID]    "
+                    f"{source_id}"
+                )
+
+                print(
+                    f"[TITLE] "
+                    f"{document['title']}"
+                )
+
+                try:
+
+                    db_id = (
+                        _upsert_document(
+                            conn,
+                            document,
+                            column_info,
                         )
                     )
 
-                    _validate_schema(
-                        columns
+                    if existing is None:
+
+                        inserted_count += 1
+
+                        action = (
+                            "INSERTED"
+                        )
+
+                    else:
+
+                        updated_count += 1
+
+                        action = (
+                            "UPDATED"
+                        )
+
+                    print(
+                        f"[DB] {action}"
                     )
 
                     print(
-                        "[DB] core_documents "
-                        "schema OK."
+                        f"[DB] id = "
+                        f"{db_id}"
                     )
 
-                    # =========================================
-                    # Before
-                    # =========================================
-
-                    rows_before = (
-                        _count_rows(
-                            cursor
-                        )
-                    )
-
-                    print(
-                        f"[DB] Rows before: "
-                        f"{rows_before}"
-                    )
-
-                    print()
-
-                    # =========================================
-                    # Load
-                    # =========================================
-
-                    for index, document in enumerate(
-                        documents,
-                        start=1,
-                    ):
-
-                        source = (
-                            document[
-                                "source"
-                            ]
-                        )
-
-                        source_id = (
-                            document[
-                                "source_id"
-                            ]
-                        )
-
-                        content_hash = (
-                            document[
-                                "content_hash"
-                            ]
-                        )
-
-                        title = (
-                            document[
-                                "title"
-                            ]
-                        )
-
-                        topic_axis = (
-                            document[
-                                "topic_axis"
-                            ]
-                        )
-
-                        # =====================================
-                        # A. Existing identity
-                        # =====================================
-
-                        existing_source = (
-                            _find_existing_source(
-                                cursor,
-                                source,
-                                source_id,
-                            )
-                        )
-
-                        # =====================================
-                        # B. Global content hash dedup
-                        #
-                        # 여기에서 기존 arXiv 15편과도 비교된다.
-                        # =====================================
-
-                        existing_hash = (
-                            _find_existing_hash(
-                                cursor,
-                                content_hash,
-                            )
-                        )
-
-                        # =====================================
-                        # 동일 hash인데 다른 document identity
-                        # =====================================
-
-                        if (
-                            existing_hash
-                            is not None
-                            and (
-                                existing_hash[
-                                    "source"
+                    results.append(
+                        {
+                            "status": (
+                                action.lower()
+                            ),
+                            "db_id": (
+                                db_id
+                            ),
+                            "source": (
+                                source
+                            ),
+                            "source_id": (
+                                source_id
+                            ),
+                            "topic_axis": (
+                                document[
+                                    "topic_axis"
                                 ]
-                                != source
-                                or existing_hash[
-                                    "source_id"
+                            ),
+                            "title": (
+                                document[
+                                    "title"
                                 ]
-                                != source_id
-                            )
-                        ):
-
-                            duplicates += 1
-
-                            print(
-                                f"[{index:02d}/"
-                                f"{len(documents)}] "
-                                f"DUPLICATE"
-                            )
-
-                            print(
-                                f"    NTRS ID : "
-                                f"{source_id}"
-                            )
-
-                            print(
-                                f"    Title   : "
-                                f"{title}"
-                            )
-
-                            print(
-                                f"    Matches : "
-                                f"{existing_hash['source']} / "
-                                f"{existing_hash['source_id']}"
-                            )
-
-                            duplicate_items.append(
-                                {
-                                    "source": (
-                                        source
-                                    ),
-
-                                    "source_id": (
-                                        source_id
-                                    ),
-
-                                    "topic_axis": (
-                                        topic_axis
-                                    ),
-
-                                    "title": (
-                                        title
-                                    ),
-
-                                    "content_hash": (
-                                        content_hash
-                                    ),
-
-                                    "duplicate_of": (
-                                        existing_hash
-                                    ),
-                                }
-                            )
-
-                            print()
-
-                            continue
-
-                        # =====================================
-                        # INSERT / UPDATE
-                        # =====================================
-
-                        row_id = (
-                            _upsert_document(
-                                cursor,
-                                document,
-                                columns,
-                            )
-                        )
-
-                        if (
-                            existing_source
-                            is None
-                        ):
-
-                            action = (
-                                "INSERTED"
-                            )
-
-                            inserted += 1
-
-                        else:
-
-                            action = (
-                                "UPDATED"
-                            )
-
-                            updated += 1
-
-                        print(
-                            f"[{index:02d}/"
-                            f"{len(documents)}] "
-                            f"{action}"
-                        )
-
-                        print(
-                            f"    DB id   : "
-                            f"{row_id}"
-                        )
-
-                        print(
-                            f"    Axis    : "
-                            f"{topic_axis}"
-                        )
-
-                        print(
-                            f"    NTRS ID : "
-                            f"{source_id}"
-                        )
-
-                        print(
-                            f"    Title   : "
-                            f"{title}"
-                        )
-
-                        print()
-
-                        loaded_items.append(
-                            {
-                                "action": (
-                                    action.lower()
-                                ),
-
-                                "db_id": (
-                                    row_id
-                                ),
-
-                                "source": (
-                                    source
-                                ),
-
-                                "source_id": (
-                                    source_id
-                                ),
-
-                                "topic_axis": (
-                                    topic_axis
-                                ),
-
-                                "title": (
-                                    title
-                                ),
-
-                                "content_hash": (
-                                    content_hash
-                                ),
-                            }
-                        )
-
-                    # =========================================
-                    # After
-                    # =========================================
-
-                    rows_after = (
-                        _count_rows(
-                            cursor
-                        )
+                            ),
+                            "content_hash": (
+                                document[
+                                    "content_hash"
+                                ]
+                            ),
+                        }
                     )
 
-                    db_summary = (
-                        _get_database_summary(
-                            cursor
-                        )
-                    )
+                except Exception:
 
-            # transaction exits here -> COMMIT
+                    failed_count += 1
+
+                    raise
+
+            # =================================================
+            # Selected 35 Verification
+            # =================================================
+
+            verification = (
+                _verify_selected_documents(
+                    conn,
+                    documents,
+                )
+            )
+
+            if (
+                verification[
+                    "verified"
+                ]
+                != EXPECTED_TOTAL
+            ):
+
+                raise RuntimeError(
+                    "Selected-document verification "
+                    "failed.\n"
+                    f"Verified: "
+                    f"{verification['verified']}/"
+                    f"{EXPECTED_TOTAL}\n"
+                    f"Missing: "
+                    f"{verification['missing']}\n"
+                    f"Hash mismatch: "
+                    f"{verification['hash_mismatch']}\n"
+                    f"Axis mismatch: "
+                    f"{verification['axis_mismatch']}"
+                )
+
+            # =================================================
+            # Core-100 Final Distribution
+            # =================================================
+
+            final_state = (
+                _validate_final_distribution(
+                    conn
+                )
+            )
+
+            # =================================================
+            # All Gates PASS -> COMMIT
+            # =================================================
+
+            conn.commit()
+
+            # =================================================
+            # Console Summary
+            # =================================================
+
+            _print_database_summary(
+                final_state
+            )
+
+            print()
+            print("=" * 78)
+
+            print(
+                "NTRS CORE-100 "
+                "DB LOADING COMPLETED"
+            )
+
+            print("=" * 78)
+
+            print(
+                f"Local selected  : "
+                f"{len(documents)}"
+            )
+
+            print(
+                f"Inserted        : "
+                f"{inserted_count}"
+            )
+
+            print(
+                f"Updated         : "
+                f"{updated_count}"
+            )
+
+            print(
+                f"Failed          : "
+                f"{failed_count}"
+            )
+
+            print()
+
+            print(
+                f"Rows before     : "
+                f"{before_state['total']}"
+            )
+
+            print(
+                f"Rows after      : "
+                f"{final_state['total']}"
+            )
+
+            print(
+                f"arXiv before    : "
+                f"{before_state['arxiv']}"
+            )
+
+            print(
+                f"arXiv after     : "
+                f"{final_state['arxiv']}"
+            )
+
+            print(
+                f"NTRS before     : "
+                f"{before_state['ntrs']}"
+            )
+
+            print(
+                f"NTRS after      : "
+                f"{final_state['ntrs']}"
+            )
+
+            print()
+
+            print(
+                f"Verified        : "
+                f"{verification['verified']} / "
+                f"{EXPECTED_TOTAL}"
+            )
+
+            # =================================================
+            # Report
+            # =================================================
+
+            report = {
+                "loader_version": (
+                    LOADER_VERSION
+                ),
+
+                "selection_file": (
+                    str(
+                        SELECTION_FILE
+                    )
+                ),
+
+                "local_selected": (
+                    len(
+                        documents
+                    )
+                ),
+
+                "inserted": (
+                    inserted_count
+                ),
+
+                "updated": (
+                    updated_count
+                ),
+
+                "failed": (
+                    failed_count
+                ),
+
+                "before_state": (
+                    before_state
+                ),
+
+                "final_state": (
+                    final_state
+                ),
+
+                "verification": (
+                    verification
+                ),
+
+                "documents": (
+                    results
+                ),
+            }
+
+            _save_json(
+                REPORT_FILE,
+                report,
+            )
+
+            print(
+                f"Report          : "
+                f"{REPORT_FILE}"
+            )
+
+            print("=" * 78)
+
+            # =================================================
+            # First Run Success
+            # =================================================
+
+            if (
+                before_state[
+                    "first_run"
+                ]
+                and inserted_count
+                == EXPECTED_TOTAL
+                and updated_count
+                == 0
+            ):
+
+                print(
+                    "[PASS] CORE-100 COMPLETE."
+                )
+
+                print()
+
+                print(
+                    "AWS RDS:"
+                )
+
+                print(
+                    "  arXiv : 50"
+                )
+
+                print(
+                    "  NTRS  : 50"
+                )
+
+                print(
+                    "  TOTAL : 100"
+                )
+
+                print()
+
+                print(
+                    "Axis totals:"
+                )
+
+                print(
+                    "  rover_autonomy       : 34"
+                )
+
+                print(
+                    "  onboard_ai           : 33"
+                )
+
+                print(
+                    "  satellite_autonomy   : 33"
+                )
+
+                print()
+
+                print(
+                    "NEXT:"
+                )
+
+                print(
+                    "Freeze Core-100 and "
+                    "start RAG chunking."
+                )
+
+            else:
+
+                print(
+                    "[PASS] Existing Core-100 "
+                    "documents verified and refreshed."
+                )
+
+            print("=" * 78)
 
     except Exception as exc:
 
-        failed = len(
-            documents
-        )
-
         print()
-        print("=" * 70)
+        print("=" * 78)
 
         print(
-            "DATABASE LOADING FAILED"
+            "NTRS CORE-100 "
+            "DB LOADING FAILED"
         )
 
-        print("=" * 70)
+        print("=" * 78)
 
         print(
             f"{type(exc).__name__}: "
@@ -1834,182 +3056,19 @@ def main():
         )
 
         print()
+
         print(
-            "The database transaction "
-            "was rolled back."
-        )
-
-        report = {
-            "source": "ntrs",
-
-            "status": "failed",
-
-            "local_documents": (
-                len(
-                    documents
-                )
-            ),
-
-            "inserted": 0,
-
-            "updated": 0,
-
-            "duplicates": 0,
-
-            "failed": (
-                failed
-            ),
-
-            "error": (
-                f"{type(exc).__name__}: "
-                f"{exc}"
-            ),
-        }
-
-        _save_json(
-            REPORT_FILE,
-            report,
+            "Transaction was not committed."
         )
 
         print(
-            f"Report: "
-            f"{REPORT_FILE}"
+            "No partial NTRS Core-100 "
+            "load was preserved."
         )
 
-        return
+        print("=" * 78)
 
-    # ========================================================
-    # 3. Report
-    # ========================================================
-
-    report = {
-        "source": "ntrs",
-
-        "status": "success",
-
-        "local_documents": (
-            len(
-                documents
-            )
-        ),
-
-        "inserted": (
-            inserted
-        ),
-
-        "updated": (
-            updated
-        ),
-
-        "duplicates": (
-            duplicates
-        ),
-
-        "failed": (
-            failed
-        ),
-
-        "rows_before": (
-            rows_before
-        ),
-
-        "rows_after": (
-            rows_after
-        ),
-
-        "loaded_documents": (
-            loaded_items
-        ),
-
-        "duplicate_documents": (
-            duplicate_items
-        ),
-
-        "database_summary": (
-            db_summary
-        ),
-    }
-
-    _save_json(
-        REPORT_FILE,
-        report,
-    )
-
-    # ========================================================
-    # Database Summary
-    # ========================================================
-
-    print()
-    print("=" * 70)
-
-    print(
-        "DATABASE SUMMARY"
-    )
-
-    print("=" * 70)
-
-    for item in db_summary:
-
-        print(
-            f"{str(item['source']):8} | "
-            f"{str(item['topic_axis']):22} | "
-            f"{item['count']}"
-        )
-
-    # ========================================================
-    # Final Summary
-    # ========================================================
-
-    print()
-    print("=" * 70)
-
-    print(
-        "NTRS DB LOADING COMPLETED"
-    )
-
-    print("=" * 70)
-
-    print(
-        f"Local documents : "
-        f"{len(documents)}"
-    )
-
-    print(
-        f"Inserted        : "
-        f"{inserted}"
-    )
-
-    print(
-        f"Updated         : "
-        f"{updated}"
-    )
-
-    print(
-        f"Duplicates      : "
-        f"{duplicates}"
-    )
-
-    print(
-        f"Failed          : "
-        f"{failed}"
-    )
-
-    print(
-        f"Rows before     : "
-        f"{rows_before}"
-    )
-
-    print(
-        f"Rows after      : "
-        f"{rows_after}"
-    )
-
-    print(
-        f"Report          : "
-        f"{REPORT_FILE}"
-    )
-
-    print("=" * 70)
+        raise
 
 
 if __name__ == "__main__":

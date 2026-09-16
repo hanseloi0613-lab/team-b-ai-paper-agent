@@ -1,0 +1,3039 @@
+{
+  "selection_version": "core100_v1",
+  "source": "ntrs",
+  "selection_method": "human_qa",
+  "purpose": "Core-100 NTRS expansion from existing 15 to final 50.",
+  "target_new_counts": {
+    "rover_autonomy": 12,
+    "onboard_ai": 12,
+    "satellite_autonomy": 11
+  },
+  "selected_counts": {
+    "rover_autonomy": 12,
+    "onboard_ai": 12,
+    "satellite_autonomy": 11
+  },
+  "selected_total": 35,
+  "selected_documents": {
+    "rover_autonomy": [
+      "20250009477",
+      "20040087098",
+      "20160011500",
+      "20120016473",
+      "20120016849",
+      "19950005122",
+      "19890010498",
+      "20040010821",
+      "20000097574",
+      "20000085880",
+      "20240011392",
+      "20260004612"
+    ],
+    "onboard_ai": [
+      "20240006994",
+      "20260005696",
+      "20260004947",
+      "20260001759",
+      "20190029005",
+      "20250002440",
+      "20250000634",
+      "19950017299",
+      "19990052840",
+      "20020060783",
+      "20180005241",
+      "20160012788"
+    ],
+    "satellite_autonomy": [
+      "20140010520",
+      "20160001200",
+      "20190003966",
+      "20080033120",
+      "20060006365",
+      "20050010075",
+      "19950011120",
+      "19940019472",
+      "19950020971",
+      "19930013066",
+      "20250005402"
+    ]
+  },
+  "selected_records": {
+    "rover_autonomy": [
+      {
+        "source": "ntrs",
+        "source_id": "20250009477",
+        "title": "Development of a JPL Open Source Rover into an Autonomous Research Platform",
+        "abstract": "This report details the implementation of autonomous navigation capabilities on the Jet Propulsion Laboratory (JPL) Open Source Rover (OSR). The enhanced system performs real-time trajectory generation, obstacle avoidance, and simultaneous localization and mapping (SLAM), converting the manually controlled platform into a fully autonomous ground vehicle. The report provides practical development insights for students and beginning developers.",
+        "authors": [
+          "Zane Brotherton"
+        ],
+        "categories": [
+          "Cybernetics, Artificial Intelligence and Robotics"
+        ],
+        "published_at": "2025-09-01",
+        "document_type": "TECHNICAL_MEMORANDUM",
+        "document_type_details": "Technical Memorandum (TM)",
+        "doi": "10.64631/YCRH8246",
+        "url": "https://ntrs.nasa.gov/citations/20250009477",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20250009477/downloads/NASA-TM-20250009477.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20250009477/downloads/NASA-TM-20250009477.pdf.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20250009477/downloads/NASA-TM-20250009477.pdf",
+        "topic_axis": "rover_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "rover_obstacle_avoidance",
+          "rover_localization_navigation"
+        ],
+        "query_scores": {
+          "rover_obstacle_avoidance": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "NASA-TM-20250009477.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20250009477/downloads/NASA-TM-20250009477.pdf.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20250009477/downloads/NASA-TM-20250009477.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20250009477/downloads/NASA-TM-20250009477.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "LaRC",
+          "center_name": "Langley Research Center",
+          "technical_review_type": "NASA_PEER_COMMITTEE",
+          "submitted_date": "2025-09-23T17:29:37.7027180+00:00",
+          "distribution_date": "2025-10-07T04:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [
+            "Autonomy ",
+            "SLAM",
+            " ROS",
+            "Open Source Rover"
+          ],
+          "other_report_numbers": [
+            "NASA/TM-20250009477"
+          ],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "rover",
+            "navigation",
+            "localization",
+            "obstacle avoidance"
+          ],
+          "axis_keyword_hit_count": 4,
+          "matched_query_count": 2,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 20,
+          "reason": "JPL rover에 autonomous navigation, real-time trajectory generation, obstacle avoidance, SLAM을 직접 구현한 현대적인 rover autonomy 자료."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20040087098",
+        "title": "Scaling Up Decision Theoretic Planning to Planetary Rover Problems",
+        "abstract": "Because of communication limits, planetary rovers must operate autonomously during consequent durations. The ability to plan under uncertainty is one of the main components of autonomy. Previous approaches to planning under uncertainty in NASA applications are not able to address the challenges of future missions, because of several apparent limits. On another side, decision theory provides a solid principle framework for reasoning about uncertainty and rewards. Unfortunately, there are several obstacles to a direct application of decision-theoretic techniques to the rover domain. This paper focuses on the issues of structure and concurrency, and continuous state variables. We describes two techniques currently under development that address specifically these issues and allow scaling-up decision theoretic solution techniques to planetary rover planning problems involving a small number of goals.",
+        "authors": [
+          "Meuleau, Nicolas",
+          "Dearden, Richard",
+          "Washington, Rich"
+        ],
+        "categories": [
+          "Lunar And Planetary Science And Exploration"
+        ],
+        "published_at": "2004-01-01",
+        "document_type": "PREPRINT",
+        "document_type_details": "Preprint (Draft being sent to journal)",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20040087098",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20040087098/downloads/20040087098.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20040087098/downloads/20040087098.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20040087098/downloads/20040087098.pdf",
+        "topic_axis": "rover_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "planetary_rover_autonomy"
+        ],
+        "query_scores": {
+          "planetary_rover_autonomy": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "20040087098.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20040087098/downloads/20040087098.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20040087098/downloads/20040087098.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20040087098/downloads/20040087098.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "ARC",
+          "center_name": "Ames Research Center",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2013-09-07T11:43:00.0000000+00:00",
+          "distribution_date": "2019-07-12T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [],
+          "other_report_numbers": [],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "rover",
+            "planetary",
+            "lunar",
+            "autonomy"
+          ],
+          "axis_keyword_hit_count": 4,
+          "matched_query_count": 1,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 24,
+          "reason": "통신 제약 하에서 planetary rover가 자율적으로 운용되기 위한 planning under uncertainty를 직접 다룸."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20160011500",
+        "title": "Horizon Based Orientation Estimation for Planetary Surface Navigation",
+        "abstract": "Planetary rovers navigate in extreme environments for which a Global Positioning System (GPS) is unavailable, maps are restricted to relatively low resolution provided by orbital imagery, and compass information is often lacking due to weak or not existent magnetic fields. However, an accurate rover localization is particularly important to achieve the mission success by reaching the science targets, avoiding negative obstacles visible only in orbital maps, and maintaining good communication connections with ground. This paper describes a horizon solution for precise rover orientation estimation. The detected horizon in imagery provided by the on board navigation cameras is matched with the horizon rendered over the existing terrain model. The set of rotation parameters (roll, pitch yaw) that minimize the cost function between the two horizon curves corresponds to the rover estimated pose.",
+        "authors": [
+          "Bouyssounouse, X.",
+          "Nefian, A. V.",
+          "Deans, M.",
+          "Thomas, A.",
+          "Edwards, L.",
+          "Fong, T."
+        ],
+        "categories": [
+          "Lunar And Planetary Science And Exploration"
+        ],
+        "published_at": "2016-09-25",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20160011500",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20160011500/downloads/20160011500.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20160011500/downloads/20160011500.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20160011500/downloads/20160011500.pdf",
+        "topic_axis": "rover_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "rover_localization_navigation"
+        ],
+        "query_scores": {
+          "rover_localization_navigation": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "20160011500.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20160011500/downloads/20160011500.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20160011500/downloads/20160011500.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20160011500/downloads/20160011500.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "ARC",
+          "center_name": "Ames Research Center",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2016-09-27T11:53:19.3000000+00:00",
+          "distribution_date": "2019-07-11T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [
+            "localization",
+            "autonomous navigation",
+            "horizon matching"
+          ],
+          "other_report_numbers": [
+            "ARC-E-DAA-TN35019",
+            "Report Number: ARC-E-DAA-TN35019"
+          ],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "rover",
+            "planetary",
+            "lunar",
+            "navigation",
+            "localization",
+            "terrain"
+          ],
+          "axis_keyword_hit_count": 6,
+          "matched_query_count": 1,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 5,
+          "reason": "GPS가 없는 planetary surface에서 rover localization과 orientation estimation을 다루는 navigation 핵심 자료."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20120016473",
+        "title": "Localization Using Visual Odometry and a Single Downward-Pointing Camera",
+        "abstract": "Stereo imaging is a technique commonly employed for vision-based navigation. For such applications, two images are acquired from different vantage points and then compared using transformations to extract depth information. The technique is commonly used in robotics for obstacle avoidance or for Simultaneous Localization And Mapping, (SLAM). Yet, the process requires a number of image processing steps and therefore tends to be CPU-intensive, which limits the real-time data rate and use in power-limited applications. Evaluated here is a technique where a monocular camera is used for vision-based odometry. In this work, an optical flow technique with feature recognition is performed to generate odometry measurements. The visual odometry sensor measurements are intended to be used as control inputs or measurements in a sensor fusion algorithm using low-cost MEMS based inertial sensors to provide improved localization information. Presented here are visual odometry results which demonstrate the challenges associated with using ground-pointing cameras for visual odometry. The focus is for rover-based robotic applications for localization within GPS-denied environments.",
+        "authors": [
+          "Swank, Aaron J."
+        ],
+        "categories": [
+          "Instrumentation And Photography"
+        ],
+        "published_at": "2012-09-01",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20120016473",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20120016473/downloads/20120016473.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20120016473/downloads/20120016473.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20120016473/downloads/20120016473.pdf",
+        "topic_axis": "rover_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "rover_obstacle_avoidance",
+          "rover_localization_navigation"
+        ],
+        "query_scores": {
+          "rover_obstacle_avoidance": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "20120016473.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20120016473/downloads/20120016473.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20120016473/downloads/20120016473.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20120016473/downloads/20120016473.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "GRC",
+          "center_name": "Glenn Research Center",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2013-08-26T03:06:00.0000000+00:00",
+          "distribution_date": "2019-07-11T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [],
+          "other_report_numbers": [
+            "NASA/TM-2012-216043",
+            "GRC-E-DAATN5688",
+            "E-18443",
+            "Report Number: NASA/TM-2012-216043",
+            "Report Number: GRC-E-DAATN5688",
+            "Report Number: E-18443"
+          ],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "rover",
+            "navigation",
+            "localization",
+            "obstacle avoidance"
+          ],
+          "axis_keyword_hit_count": 4,
+          "matched_query_count": 2,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 21,
+          "reason": "visual odometry와 localization, obstacle avoidance/SLAM과 연결되는 rover navigation 핵심 기술."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20120016849",
+        "title": "Tele-Operated Lunar Rover Navigation Using Lidar",
+        "abstract": "Near real-time tele-operated driving on the lunar surface remains constrained by bandwidth and signal latency despite the Moon s relative proximity. As part of our work within NASA s Human-Robotic Systems Project (HRS), we have developed a stand-alone modular LIDAR based safeguarded tele-operation system of hardware, middleware, navigation software and user interface. The system has been installed and tested on two distinct NASA rovers-JSC s Centaur2 lunar rover prototype and ARC s KRex research rover- and tested over several kilometers of tele-operated driving at average sustained speeds of 0.15 - 0.25 m/s around rocks, slopes and simulated lunar craters using a deliberately constrained telemetry link. The navigation system builds onboard terrain and hazard maps, returning highest priority sections to the off-board operator as permitted by bandwidth availability. It also analyzes hazard maps onboard and can stop the vehicle prior to contacting hazards. It is robust to severe pose errors and uses a novel scan alignment algorithm to compensate for attitude and elevation errors.",
+        "authors": [
+          "Pedersen, Liam",
+          "Allan, Mark B.",
+          "Utz, Hans, Heinrich",
+          "Deans, Matthew C.",
+          "Bouyssounouse, Xavier",
+          "Choi, Yoonhyuk",
+          "Fluckiger, Lorenzo",
+          "Lee, Susan Y.",
+          "To, Vinh",
+          "Loh, Jonathan",
+          "Bluethmann, William",
+          "Burridge, Robert R.",
+          "Graf, Jodi",
+          "Hambuchen, Kimberly"
+        ],
+        "categories": [
+          "Communications And Radar"
+        ],
+        "published_at": "2012-09-03",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20120016849",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20120016849/downloads/20120016849.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20120016849/downloads/20120016849.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20120016849/downloads/20120016849.pdf",
+        "topic_axis": "rover_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "lunar_rover_navigation_broad"
+        ],
+        "query_scores": {
+          "lunar_rover_navigation_broad": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "20120016849.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20120016849/downloads/20120016849.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20120016849/downloads/20120016849.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20120016849/downloads/20120016849.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "ARC",
+          "center_name": "Ames Research Center",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2013-08-25T22:39:00.0000000+00:00",
+          "distribution_date": "2019-07-12T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [],
+          "other_report_numbers": [
+            "ARC-E-DAA-TN5509",
+            "Report Number: ARC-E-DAA-TN5509"
+          ],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "rover",
+            "lunar",
+            "navigation",
+            "terrain"
+          ],
+          "axis_keyword_hit_count": 4,
+          "matched_query_count": 1,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 23,
+          "reason": "LIDAR 기반 safeguarded lunar rover tele-operation/navigation 자료로 통신 지연과 autonomous navigation의 경계 문제를 다루기에 적합."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "19950005122",
+        "title": "The MITy micro-rover: Sensing, control, and operation",
+        "abstract": "The sensory, control, and operation systems of the 'MITy' Mars micro-rover are discussed. It is shown that the customized sun tracker and laser rangefinder provide internal, autonomous dead reckoning and hazard detection in unstructured environments. The micro-rover consists of three articulated platforms with sensing, processing and payload subsystems connected by a dual spring suspension system. A reactive obstacle avoidance routine makes intelligent use of robot-centered laser information to maneuver through cluttered environments. The hazard sensors include a rangefinder, inclinometers, proximity sensors and collision sensors. A 486/66 laptop computer runs the graphical user interface and programming environment. A graphical window displays robot telemetry in real time and a small TV/VCR is used for real time supervisory control. Guidance, navigation, and control routines work in conjunction with the mapping and obstacle avoidance functions to provide heading and speed commands that maneuver the robot around obstacles and towards the target.",
+        "authors": [
+          "Malafeew, Eric",
+          "Kaliardos, William"
+        ],
+        "categories": [
+          "Cybernetics"
+        ],
+        "published_at": "1994-03-01",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/19950005122",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/19950005122/downloads/19950005122.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/19950005122/downloads/19950005122.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/19950005122/downloads/19950005122.pdf",
+        "topic_axis": "rover_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "rover_obstacle_avoidance"
+        ],
+        "query_scores": {
+          "rover_obstacle_avoidance": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "19950005122.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/19950005122/downloads/19950005122.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/19950005122/downloads/19950005122.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/19950005122/downloads/19950005122.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "CDMS",
+          "center_name": "Legacy CDMS",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2013-09-06T22:18:00.0000000+00:00",
+          "distribution_date": "2019-06-26T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [],
+          "other_report_numbers": [
+            "AIAA PAPER 94-1278-CP",
+            "Report Number: AIAA PAPER 94-1278-CP"
+          ],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "rover",
+            "mars",
+            "navigation",
+            "obstacle avoidance"
+          ],
+          "axis_keyword_hit_count": 4,
+          "matched_query_count": 1,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 25,
+          "reason": "Mars micro-rover의 autonomous dead reckoning, hazard detection, sensing/control을 다루는 직접적인 rover autonomy 자료."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "19890010498",
+        "title": "Robot path planning using a genetic algorithm",
+        "abstract": "Robot path planning can refer either to a mobile vehicle such as a Mars Rover, or to an end effector on an arm moving through a cluttered workspace. In both instances there may exist many solutions, some of which are better than others, either in terms of distance traversed, energy expended, or joint angle or reach capabilities. A path planning program has been developed based upon a genetic algorithm. This program assumes global knowledge of the terrain or workspace, and provides a family of good paths between the initial and final points. Initially, a set of valid random paths are constructed. Successive generations of valid paths are obtained using one of several possible reproduction strategies similar to those found in biological communities. A fitness function is defined to describe the goodness of the path, in this case including length, slope, and obstacle avoidance considerations. It was found that with some reproduction strategies, the average value of the fitness function improved for successive generations, and that by saving the best paths of each generation, one could quite rapidly obtain a collection of good candidate solutions.",
+        "authors": [
+          "Cleghorn, Timothy F.",
+          "Baffes, Paul T.",
+          "Wang, Liu"
+        ],
+        "categories": [
+          "Computer Programming And Software"
+        ],
+        "published_at": "1988-11-01",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/19890010498",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/19890010498/downloads/19890010498.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/19890010498/downloads/19890010498.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/19890010498/downloads/19890010498.pdf",
+        "topic_axis": "rover_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "rover_obstacle_avoidance"
+        ],
+        "query_scores": {
+          "rover_obstacle_avoidance": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "19890010498.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/19890010498/downloads/19890010498.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/19890010498/downloads/19890010498.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/19890010498/downloads/19890010498.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "CDMS",
+          "center_name": "Legacy CDMS",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2013-09-05T23:40:00.0000000+00:00",
+          "distribution_date": "2013-08-29T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [],
+          "other_report_numbers": [],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "rover",
+            "mars",
+            "path planning",
+            "terrain",
+            "obstacle avoidance"
+          ],
+          "axis_keyword_hit_count": 5,
+          "matched_query_count": 1,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 19,
+          "reason": "Mars rover를 포함한 mobile robot의 path planning을 genetic algorithm으로 다루는 경로계획 foundational 자료."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20040010821",
+        "title": "Essential Autonomous Science Inference on Rovers (EASIR)",
+        "abstract": "Existing constraints on time, computational, and communication resources associated with Mars rover missions suggest on-board science evaluation of sensor data can contribute to decreasing human-directed operational planning, optimizing returned science data volumes, and recognition of unique or novel data. All of which act to increase the scientific return from a mission. Many different levels of science autonomy exist and each impacts the data collected and returned by, and activities of, rovers. Several computational algorithms, designed to recognize objects of interest to geologists and biologists, are discussed. The algorithms represent various functions that producing scientific opinions and several scenarios illustrate how the opinions can be used.",
+        "authors": [
+          "Roush, Ted L.",
+          "Shipman, Mark",
+          "Morris, Robert",
+          "Gazis, Paul",
+          "Pedersen, Liam"
+        ],
+        "categories": [
+          "Lunar And Planetary Science And Exploration"
+        ],
+        "published_at": "2003-01-01",
+        "document_type": "PREPRINT",
+        "document_type_details": "Preprint (Draft being sent to journal)",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20040010821",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20040010821/downloads/20040010821.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20040010821/downloads/20040010821.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20040010821/downloads/20040010821.pdf",
+        "topic_axis": "rover_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "rover_autonomous_science"
+        ],
+        "query_scores": {
+          "rover_autonomous_science": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "20040010821.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20040010821/downloads/20040010821.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20040010821/downloads/20040010821.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20040010821/downloads/20040010821.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "ARC",
+          "center_name": "Ames Research Center",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2013-09-07T11:31:00.0000000+00:00",
+          "distribution_date": "2019-07-12T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [],
+          "other_report_numbers": [
+            "IEEAC Paper 1328",
+            "Report Number: IEEAC Paper 1328"
+          ],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "rover",
+            "planetary",
+            "lunar",
+            "mars",
+            "autonomy",
+            "autonomous science"
+          ],
+          "axis_keyword_hit_count": 6,
+          "matched_query_count": 1,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 7,
+          "reason": "Mars rover의 onboard science evaluation과 human-directed planning 감소를 다루는 autonomous science 핵심 자료."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20000097574",
+        "title": "Autonomous Science Analyses of Digital Images for Mars Sample Return and Beyond",
+        "abstract": "To adequately explore high priority landing sites, scientists require rovers with greater mobility. Therefore, future Mars missions will involve rovers capable of traversing tens of kilometers (vs. tens of meters traversed by Mars Pathfinder's Sojourner). However, the current process by which scientists interact with a rover does not scale to such distances. A single science objective is achieved through many iterations of a basic command cycle: (1) all data must be transmitted to Earth and analyzed; (2) from this data, new targets are selected and the necessary information from the appropriate instruments are requested; (3) new commands are then uplinked and executed by the spacecraft and (4) the resulting data are returned to Earth, starting the process again. Experience with rover tests on Earth shows that this time intensive process cannot be substantially shortened given the limited data downlink bandwidth and command cycle opportunities of real missions. Sending complete multicolor panoramas at several waypoints, for example, is out of the question for a single downlink opportunity. As a result, long traverses requiring many science command cycles would likely require many weeks, months or even years, perhaps exceeding rover design life or other constraints. Autonomous onboard science analyses can address these problems in two ways. First, it will allow the rover to transmit only \"interesting\" images, defined as those likely to have higher science content. Second, the rover will be able to anticipate future commands, for example acquiring and returning spectra of \"interesting\" rocks along with the images in which they were detected. Such approaches, coupled with appropriate navigational software, address both the data volume and command cycle bottlenecks that limit both rover mobility and science yield. We are developing algorithms to enable such intelligent decision making by autonomous spacecraft. Reflecting the ultimate level of ability we aim for, this program has been dubbed the \"Grad Student on Mars Project\". We envision, for example, an appropriately intelligent Athena-like rover at the Pathfinder landing site might be able to traverse over the ridge towards \"Twin Peaks\" to obtain better information on the stratigraphy of these \"streamlined islands\" or of the size, composition and morphology of boulders located on them. Along the traverse, the intelligent rover would collect and analyze images and obtain spectra of geologically interesting features or regions. The intelligent rover might also traverse further up Arcs Vallis, and find additional paleoflood stage indicators such as slackwater deposits. Recognizing additional regions where boulders are imbricated, noting changes in their size, distribution, morphology, composition and the associated changes in channel geometry would yield important information on the outflow channel's paleoflood history, Representative images and associated supporting data from these locations could be downlinked to Earth along with the data requested by scientists from the previous uplink opportunity. Our initial work has focused on recognizing geologically interesting portions of images. Here we summarize some of the algorithms to date.",
+        "authors": [
+          "Gulick, V. C.",
+          "Morris, R. L.",
+          "Ruzon, M.",
+          "Roush, T. L."
+        ],
+        "categories": [
+          "Lunar And Planetary Science And Exploration"
+        ],
+        "published_at": "1999-01-01",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20000097574",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20000097574/downloads/20000097574.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20000097574/downloads/20000097574.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20000097574/downloads/20000097574.pdf",
+        "topic_axis": "rover_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "rover_autonomous_science"
+        ],
+        "query_scores": {
+          "rover_autonomous_science": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "20000097574.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20000097574/downloads/20000097574.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20000097574/downloads/20000097574.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20000097574/downloads/20000097574.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "ARC",
+          "center_name": "Ames Research Center",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2013-09-07T12:19:00.0000000+00:00",
+          "distribution_date": "2019-07-12T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [],
+          "other_report_numbers": [],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "rover",
+            "planetary",
+            "lunar",
+            "mars",
+            "navigation",
+            "mobility",
+            "autonomous science"
+          ],
+          "axis_keyword_hit_count": 7,
+          "matched_query_count": 1,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 1,
+          "reason": "장거리 Mars rover 운용에서 scientist interaction의 한계를 줄이기 위한 autonomous science 분석을 직접 다룸."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20000085880",
+        "title": "Autonomous Science Decision Making for Mars Sample Return",
+        "abstract": "In the near future NASA intends to explore Mars in preparation for a sample return mission using robotic devices such as landers, rovers, orbiters, airplanes, and/or balloons. Such platforms will likely carry imaging devices to characterize the surface morphology, and a variety of analytical instruments intended to evaluate the chemical and mineralogical nature of the environment(s) that they encounter. Historically, mission operations have involved the following sequence of activities: (1) return of scientific data from the vehicle; (2) evaluation of the data by space scientists; (3) recommendations of the scientists regarding future mission activity; (4) transmission of commands to the vehicle to achieve this activity; and (5) new activity by the vehicle in response to those commands. This is repeated for the duration of the mission, with command opportunities once or perhaps twice per day. In a rapidly changing environment, such as might be encountered by a rover traversing hundreds of meters a day or an airplane soaring over several hundred of kilometers, this traditional cycle of data evaluation and commands is not amenable to rapid long range traverses, discovery of novelty, or rapid response to any unanticipated situations. In addition, to issues of response time, the nature of imaging and/or spectroscopic devices are such that tremendous data volumes can be acquired, for example during a traverse. These data volumes can rapidly exceed on-board memory capabilities prior to an opportunity to transmit it to Earth.",
+        "authors": [
+          "Roush, Ted L.",
+          "Gulick, V.",
+          "Morris, R.",
+          "Gazis, P.",
+          "Benedix, G.",
+          "Glymour, C.",
+          "Ramsey, J.",
+          "Pedersen, L.",
+          "Ruzon, M.",
+          "Buntine, W.",
+          "Oliver, J."
+        ],
+        "categories": [
+          "Lunar And Planetary Science And Exploration"
+        ],
+        "published_at": "1999-01-01",
+        "document_type": "PREPRINT",
+        "document_type_details": "Preprint (Draft being sent to journal)",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20000085880",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20000085880/downloads/20000085880.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20000085880/downloads/20000085880.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20000085880/downloads/20000085880.pdf",
+        "topic_axis": "rover_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "rover_autonomous_science"
+        ],
+        "query_scores": {
+          "rover_autonomous_science": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "20000085880.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20000085880/downloads/20000085880.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20000085880/downloads/20000085880.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20000085880/downloads/20000085880.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "ARC",
+          "center_name": "Ames Research Center",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2013-09-07T12:17:00.0000000+00:00",
+          "distribution_date": "2019-07-12T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [],
+          "other_report_numbers": [],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "rover",
+            "planetary",
+            "lunar",
+            "mars",
+            "autonomous science"
+          ],
+          "axis_keyword_hit_count": 5,
+          "matched_query_count": 1,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 16,
+          "reason": "Mars Sample Return 맥락에서 autonomous science decision making을 직접 다루는 자료."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20240011392",
+        "title": "Lunar Terrain Vehicle (LTV) Remote Teleoperation Studies Under Four Lunar Communication Latencies",
+        "abstract": "Remotely operating a lunar rover from Earth while subject to an Earth-Moon time delay of multiple seconds could result in a dangerous state where the roving vehicle is either damaged or lost, thereby potentially compromising an entire mission or series of missions. Providing the right capabilities to the remote operator to manage inherent communication latencies will be important for remote driving to be successful. The National Aeronautics and Space Administration (NASA) conducted two studies to investigate the average speed and number of kilometers per day that an operator on Earth could teleoperate a notional Artemis unpressurized rover with minimal remote operator capabilities under 0- and 4-second communication delays (April 2023 study) and 6- and 8-second delays (August 2023 study). A primary goal of these studies was to understand if an Artemis Lunar Terrain Vehicle (LTV) could cover 6 kilometers (km) in 24 hours when operated remotely. During the April 2023 evaluation, eight test operators used an in-house simulation of the lunar surface South Pole to teleoperate a NASA government reference LTV. Each operator received approximately 30 minutes of remote driving familiarization/training prior to their test run. Operators viewed the surrounding terrain via a single, rover mast-mounted, high-resolution camera with pan/tilt/zoom capabilities; continuous communication was provided throughout all testing. In the August 2023 evaluation, remote operators received approximately 3 hours of familiarization training in each latency, and the simulation environment provided remote operators with an operator-selected rate limiter to enable finer sensitivity in the hand controller and a predictive circle function to better assist operators with predicting the path the vehicle could take. All test operators were able to successfully navigate and drive through six different types of terrain and five planned traverse scenarios using natural lighting under all communication delays. Results for average speeds for each communication delay, computed by averaging the data from all test conditions for that latency and all operators, are shown in the table below. The average speed data was then used to derive the total time needed to cover 6 km, 8 km, and 20 km. Remote operators drove slower and used the brake more frequently when subject to a communication latency as opposed to no communication latency. Subjective workload assessments revealed that while operating in a latency the overall workload significantly increased when compared to a 0-s delay with mental demand, frustration, and performance being the primary contributing factors. Driving strategies in the 0-s delay did not vary significantly among subjects; however, in the 4-s delay condition, three different driving strategies were identified. In the 6-s and 8-s latency conditions the operator’s use of the cruise control to maintain speed was more apparent. Additionally, over the course of the August study, the operator took advantage of the predictive circle indicator on the navigation display and over 95% of the operator’s navigation used the mast camera 180-degree panning function for ground truthing in terms of boulders and craters. Operators started to define more specific parameters in driving strategies for general operations. This consisted of setting the vehicle into a low-speed cruise mode of approximately 1–1.5 kph and noticing driving performance of the vehicle seemed to be much harder at slower speeds 0.4–0.8 kph; however, the vehicle was more responsive at speeds of 2.9–3.6 kph. Regardless of communication delay, operators used both the horizontal translation rails and the vehicle fenders as guides to predict a path for the vehicle through heavily concentrated terrain features. Test operators acknowledged that the teleoperations training for this study was substantially less than what an actual LTV remote operator will ultimately receive. They estimated a minimum of 20 to 100 hours spread across multiple days and weeks (e.g., strategies included immersion training over a 3-day period, to a short 8-week starter program) would be needed to get an operator ~ 60% proficient (i.e., able to complete a subset of remote driving tasks), to a yearlong program for full proficiency in remote driving tasks under all terrain types and natural lighting conditions. Remotely operating a vehicle on another planetary body while subject to communication latency is a complex task. Speed, distance covered, time spent driving, time spent navigating, brake usage and rock contacts are all affected by operator workload, driving strategies, workstation ergonomics and training. These studies provided a “firstlook” answer to a potential system requirement (namely if a remote operator could cover a given distance in a given amount of time); however, considerable general knowledge was gained to begin to understand what it will take to make a successful lunar rover teleoperator.",
+        "authors": [
+          "Harry L Litaker, Jr.",
+          "Kara H Beaton",
+          "Zu Qun Li",
+          "John F Lewis"
+        ],
+        "categories": [
+          "Cybernetics, Artificial Intelligence and Robotics"
+        ],
+        "published_at": "2025-03-01",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20240011392",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20240011392/downloads/Teleops%20IEEE%20Paper%20FY24%20FINAL.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20240011392/downloads/Teleops%20IEEE%20Paper%20FY24%20FINAL.pdf.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20240011392/downloads/Teleops%20IEEE%20Paper%20FY24%20FINAL.pdf",
+        "topic_axis": "rover_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "lunar_rover_navigation_broad"
+        ],
+        "query_scores": {
+          "lunar_rover_navigation_broad": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "Teleops IEEE Paper FY24 FINAL.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20240011392/downloads/Teleops%20IEEE%20Paper%20FY24%20FINAL.pdf.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20240011392/downloads/Teleops%20IEEE%20Paper%20FY24%20FINAL.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20240011392/downloads/Teleops%20IEEE%20Paper%20FY24%20FINAL.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "JSC",
+          "center_name": "Johnson Space Center",
+          "technical_review_type": "SINGLE_EXPERT",
+          "submitted_date": "2024-09-04T23:35:40.8432570+00:00",
+          "distribution_date": "2024-10-03T05:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [
+            "LTV",
+            "Teleoperations",
+            "Communication"
+          ],
+          "other_report_numbers": [],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "rover",
+            "planetary",
+            "lunar",
+            "navigation",
+            "terrain"
+          ],
+          "axis_keyword_hit_count": 5,
+          "matched_query_count": 1,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 9,
+          "reason": "Earth-Moon communication latency가 lunar rover teleoperation 안전성에 미치는 영향을 다뤄 autonomy 필요성을 설명하기 적합."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20260004612",
+        "title": "X-Hab 2026: LiDAR-Powered Autonomous Charging Service Capability for Surface Rovers and Systems",
+        "abstract": "This document details the timeline of the LiDAR-Powered Autonomous Charging Service Capability for Surface Rovers and Systems project, initiated by the Fall 2025 semester class and completed by the Spring 2026 semester class. This project focuses on developing a fully autonomous system composed of a mobile surface rover and an induction charging station with a robotic arm, both controlled by their own NVIDIA Jetson Orin Nano. Structural improvements to the rover suspension system and body eliminated excessive camber, reduced stress and strain on the plexiglass body, and improved maneuverability and durability of the rover. The charging station robotic arm was fully redesigned to increase reach while minimizing weight and increasing misalignment tolerance during docking on uneven terrain. Electrical system improvements addressed previous torque and power limitations of both the rover and charging station arm. High-torque servo motors were selected based on updated calculations which incorporated terrain slope and Factor of Safety, enabling zero-point turning for the rover and increased payload capacity of the charging station arm. Significant progress was made in autonomy and perception. The rover now employs 3D LiDAR and SLAM mapping for localization, mapping, and path planning. The Battery Monitoring System (BMS) was created to coordinate battery management between the rover and charging station. The BMS provides continuous monitoring of battery state of charge, temperature, current, and will enable the autonomous initiation, execution, and termination of the charging cycle via Bluetooth communication. Testing of the WIBOTIC induction charging system demonstrated reliable power transfer under both aligned and misaligned conditions. This project demonstrated the ability of an autonomously navigating surface rover to independently plan a path to the charging station, dock, and the charging station to autonomously deploy a robotic charging arm and initiate charging of the rover. This work details the progress made to demonstrate the feasibility of autonomous surface rover navigation and recharging systems.",
+        "authors": [
+          "Megan Steele",
+          "Rafe Hamilton",
+          "Kyle Henderson",
+          "Abigeal McCarthy",
+          "Aidan Real",
+          "Amadou Mbye",
+          "Austen Almeida",
+          "Austin Barnes",
+          "Austin Herndon",
+          "Austin Nobis",
+          "Axel Salazar",
+          "Ayden Perez",
+          "BaJeah Rhoden",
+          "Bryan Acosta",
+          "Bryce Freeman",
+          "Christopher Proctor",
+          "Clinton Madden",
+          "Cohen Cox",
+          "Cole Vandiver",
+          "Coleman Norton",
+          "Collin Thompson",
+          "Dawson Peek",
+          "Ethan Brown",
+          "Garrett Murdock",
+          "Hunder Mace",
+          "Isaiah Lee",
+          "Jacob Allan",
+          "James Young",
+          "Javier Bejarano",
+          "Javon Montford",
+          "Josh Hawkins",
+          "Justin Tyre",
+          "Katie Brown",
+          "Kevin McElrath",
+          "Matt Langley",
+          "Matthew Walvoord",
+          "Micheal Taylor",
+          "Nichole Christian",
+          "Noah Barker",
+          "Payton Fuller",
+          "Peyton Sperier",
+          "Peyton Stanfield",
+          "Stephen Nicholas",
+          "Timothy Mayo",
+          "Tristan Graham",
+          "Wesley Powell",
+          "Zach Davis",
+          "Liam Fox",
+          "Reasun Allah-U-Akbar",
+          "Valentin Soloiu",
+          "Brian Vlcek",
+          "Marcel Ilie",
+          "Timothy Sutton"
+        ],
+        "categories": [
+          "Ground Support Systems and Facilities (Space)",
+          "Mechanical Engineering",
+          "Electronics and Electrical Engineering"
+        ],
+        "published_at": "2026-05-01",
+        "document_type": "CONTRACTOR_OR_GRANTEE_REPORT",
+        "document_type_details": "Contractor or Grantee Report",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20260004612",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20260004612/downloads/GSU%20LIDAR%20Final.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20260004612/downloads/GSU%20LIDAR%20Final.pdf.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20260004612/downloads/GSU%20LIDAR%20Final.pdf",
+        "topic_axis": "rover_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "rover_localization_navigation"
+        ],
+        "query_scores": {
+          "rover_localization_navigation": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "GSU LIDAR Final.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20260004612/downloads/GSU%20LIDAR%20Final.pdf.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20260004612/downloads/GSU%20LIDAR%20Final.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20260004612/downloads/GSU%20LIDAR%20Final.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "KSC",
+          "center_name": "Kennedy Space Center",
+          "technical_review_type": "NASA_TECHNICAL_MANAGEMENT",
+          "submitted_date": "2026-05-21T18:08:16.7365260+00:00",
+          "distribution_date": "2026-06-11T04:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [],
+          "other_report_numbers": [],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "rover",
+            "navigation",
+            "path planning",
+            "localization",
+            "terrain",
+            "autonomy"
+          ],
+          "axis_keyword_hit_count": 6,
+          "matched_query_count": 1,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 4,
+          "reason": "LiDAR를 사용하는 autonomous surface rover와 charging service capability를 다루는 최신 surface autonomy 사례."
+        }
+      }
+    ],
+    "onboard_ai": [
+      {
+        "source": "ntrs",
+        "source_id": "20240006994",
+        "title": "Smallsat 2024 - Starling Cubesat Swarm Technology Demonstration Flight Results",
+        "abstract": "The Starling swarm of four 6U CubeSats launched in July 2023 to test four key technologies to enable future swarm missions: 1) Mobile Ad-Hoc Networking (MANET) over a crosslink radio network 2) Autonomous onboard decision-making for operations 3) Optical-based absolute and relative navigation 4) Autonomous maneuver planning and execution The Starling team implemented the Better Approach to Mobile Ad-hoc Networking (B.A.T.M.A.N.) protocol to automatically manage the crosslink network of four satellites. The B.A.T.M.A.N. protocol uses a decentralized approach to managing a multi-hop mesh network of devices, in this case, a satellite swarm. The four satellites were able to successfully establish a network at multiple data rates and demonstrate file transfer and command issuance between spacecraft over the network. Starling incorporated Distributed Spacecraft Autonomy's (DSA) software to demonstrate onboard decision-making. The DSA software takes L1/L2 band GPS measurements and uses them to estimate the relative Total Electron Count (TEC) in the ionosphere. The onboard software then determines if there are any features of interest and provides that information to the other satellites over the crosslink network. The swarm of satellites then reaches a consensus on the optimal TEC observation strategy and adjusts its measurement collection tactics autonomously. The Starling Formation-Flying Optical Experiment (StarFOX), produced by Stanford's Space Rendezvous Laboratory, uses the onboard star trackers to collect images of the other swarm spacecraft and produce angles-only navigation estimates. This system is envisioned to be valuable in applications in which Global Navigation Satellite Systems (GNSS) are not available, such as in cis-lunar or deep space. StarFOX successfully applied its algorithms to multiple simultaneous spacecraft targets using the star tracker imagery. Finally, Starling used Emergent Space's Cluster Flight Application (CFA) software suite for the Reconfiguration and Orbit Maintenance Experiments Onboard (ROMEO) demonstration of autonomously planning and executing propulsive maneuvers. Large swarms will need to be able to maintain formation requirements with minimal operator involvement, especially as the size of the swarm scales up. Results from the ROMEO experiment are presented. Starling is funded by the Small Spacecraft Technology (SST) program out of NASA's Space Technology Mission Directorate (STMD).",
+        "authors": [
+          "Scott Miller",
+          "Caleb Adams",
+          "Nahum Alem",
+          "Howard Cannon",
+          "Randy Grashuis",
+          "Ted Hendriks",
+          "Soon Hwang",
+          "Michael Iatauro",
+          "Craig Pires",
+          "Justin Kruger",
+          "Simone D' Amico"
+        ],
+        "categories": [
+          "Spacecraft Design, Testing and Performance"
+        ],
+        "published_at": "2024-06-10",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20240006994",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20240006994/downloads/SSC24_Starling_Swarm_Flight_Results.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20240006994/downloads/SSC24_Starling_Swarm_Flight_Results.pdf.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20240006994/downloads/SSC24_Starling_Swarm_Flight_Results.pdf",
+        "topic_axis": "onboard_ai",
+        "language": "en",
+        "matched_queries": [
+          "deep_space_navigation"
+        ],
+        "query_scores": {
+          "deep_space_navigation": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "SSC24_Starling_Swarm_Flight_Results.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20240006994/downloads/SSC24_Starling_Swarm_Flight_Results.pdf.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20240006994/downloads/SSC24_Starling_Swarm_Flight_Results.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20240006994/downloads/SSC24_Starling_Swarm_Flight_Results.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "ARC",
+          "center_name": "Ames Research Center",
+          "technical_review_type": "NASA_PEER_COMMITTEE",
+          "submitted_date": "2024-06-05T06:07:34.1680770+00:00",
+          "distribution_date": "2024-08-03T07:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [
+            "distributed systems",
+            "swarms",
+            "technology demonstration"
+          ],
+          "other_report_numbers": [
+            "SSC24-I-06"
+          ],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "spacecraft",
+            "deep space",
+            "onboard",
+            "autonomy",
+            "autonomous",
+            "decision",
+            "planning",
+            "navigation"
+          ],
+          "axis_keyword_hit_count": 8,
+          "matched_query_count": 1,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 2,
+          "reason": "Starling CubeSat swarm에서 autonomous onboard decision-making, relative navigation, maneuver planning을 실제 flight result로 다룸."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20260005696",
+        "title": "Results from NASA’s Distributed Spacecraft Autonomy Project’s Extended Mission on Starling",
+        "abstract": "The Distributed Spacecraft Autonomy (DSA) experiments on Starling 1.0 marked a significant milestone as the first demonstration of fully autonomous distributed operations on multiple spacecraft. DSA demonstrated the ability to adapt to measurements of Total Electron Content (TEC) and visibility of GPS satellites in a fully distributed autonomous manner. In subsequent experiments, DSA 1.5 focused on improving its science proxy towards a higher-fidelity data product computed at the edge, as well as addressing emergent autonomy needs from Starling 1.0, particularly local autonomy and robust crosslink data transfer. The purpose of improving the TEC measurement was to demonstrate that high-quality observation data could be generated onboard comparable to data typically produced through ground-based data processing systems. DSA 1.5 was able to incorporate corrections as well as a measure of data quality, both of which are available for the autonomy to incorporate in its decision-making. The autonomy focus of DSA 1.5 was to develop advanced capabilities for distributed space systems by increasing the robustness, resilience and self-sufficiency of spacecraft. While DSA successfully demonstrated autonomous distributed decision-making onboard Starling 1.0, this was accomplished only in software. To demonstrate the ability to command spacecraft hardware subsystems (e.g., crosslink radios) rather than just re-configuring software would greatly increase confidence in onboard autonomy. Similarly, the ability to safely and autonomously create, and power on and off, the cross-link network during operations will raise mission efficiency by decreasing power consumption, reducing bandwidth, and overall reducing spacecraft mission operation planning. DSA was able to autonomously create, break down, and re-create the crosslink network in response to changes in the radio frequency (RF) environment—TEC was again used as a proxy for demonstration purposes—as well as orbit position. These reactive autonomy demonstrations were driven by PLEXIL, a NASA-developed plan execution technology flown in space for the first time. Finally, DSA 1.5 demonstrated the ability to send large files over the Ad-Hoc crosslink network by redelivering failed file segments. This redelivery was based on standard transfer measures in the COMM application and an additional layer of autonomy. DSA 1.5 file delivery (known as LFT) was event-driven instead of pre-scheduled based on absolute or relative time, thus more robust operations were enabled. LFT was successfully tested on the DSA 1.5 mission extension, during which the spacecraft successfully and repeatedly transferred 10MB files with guarantees on integrity and validity across multiple network interruptions lasting 60 minutes.",
+        "authors": [
+          "Caleb Adams",
+          "Michael Iatauro",
+          "Brian Kempa",
+          "K Michael Dalal",
+          "Sergei Gridnev",
+          "Michael Ho",
+          "Caroline Lassiter"
+        ],
+        "categories": [
+          "Space Processing",
+          "Computer Programming and Software",
+          "Cybernetics, Artificial Intelligence and Robotics"
+        ],
+        "published_at": "2026-08-26",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20260005696",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20260005696/downloads/SmallSat2026-DSA-Results-Adams.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20260005696/downloads/SmallSat2026-DSA-Results-Adams.pdf.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20260005696/downloads/SmallSat2026-DSA-Results-Adams.pdf",
+        "topic_axis": "onboard_ai",
+        "language": "en",
+        "matched_queries": [
+          "onboard_autonomy",
+          "spacecraft_ai_autonomy",
+          "autonomous_planning"
+        ],
+        "query_scores": {
+          "onboard_autonomy": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "SmallSat2026-DSA-Results-Adams.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20260005696/downloads/SmallSat2026-DSA-Results-Adams.pdf.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20260005696/downloads/SmallSat2026-DSA-Results-Adams.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20260005696/downloads/SmallSat2026-DSA-Results-Adams.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "ARC",
+          "center_name": "Ames Research Center",
+          "technical_review_type": "NASA_PEER_COMMITTEE",
+          "submitted_date": "2026-06-25T00:09:55.1209200+00:00",
+          "distribution_date": "2026-08-26T07:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [
+            "small spacecraft",
+            "swarm",
+            "multi-agent",
+            "TEC"
+          ],
+          "other_report_numbers": [
+            "SSC26-RAII-07"
+          ],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "spacecraft",
+            "onboard",
+            "autonomy",
+            "autonomous",
+            "artificial intelligence",
+            "decision",
+            "planning"
+          ],
+          "axis_keyword_hit_count": 7,
+          "matched_query_count": 3,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 3,
+          "reason": "NASA Distributed Spacecraft Autonomy가 다중 spacecraft에서 완전 자율 분산 운용을 flight experiment로 검증한 최신 사례."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20260004947",
+        "title": "Flight Test of the autonomous Navigation, Guidance, and Control (autoNGC) Software on the Starling Swarm",
+        "abstract": "Performing real-time autonomous guidance, navigation, and control (GN&C) functions onboard spacecraft is critical for enabling greater spacecraft autonomy. The autoNGC (autonomous Navigation, Guidance, and Control) software suite is a collection of applications, built on the NASA core Flight System (cFS), that provides these capabilities. This paper presents results from the first flight demonstration of autoNGC, conducted on the NASA Starling mission in 2025. The Starling spacecraft's use of cFS enabled autoNGC to be uplinked and run onboard despite the spacecraft already being in orbit. The flight test had three goals: to demonstrate onboard GPS navigation, onboard state and uncertainty prediction for space traffic management, and onboard maneuver planning. The autoNGC navigation filter, GEONS (Goddard Enhanced Onboard Navigation System), was configured to generate state estimates from incoming GPS measurements. These estimates were then used to predict the spacecraft state and associated error covariance over the following three days and to compute station-keeping maneuvers. Flight test results demonstrated successful completion of all three goals while also highlighting opportunities for additional autoNGC enhancement. The Starling flight test was a critical milestone in advancing autoNGC's technology readiness level, achieving TRL 7 for low-Earth orbit by validating the ability to perform navigation, prediction, and maneuver planning onboard. This autonomy is especially valuable for constellations and other operationally demanding distributed systems missions. The wide adoption of cFS within the SmallSat community and the availability of key autoNGC apps on the NASA software catalog mean other missions could potentially leverage autoNGC to enhance their spacecraft autonomy.",
+        "authors": [
+          "Robert Pritchett",
+          "Nathan Stacey",
+          "Sun Hur-Diaz",
+          "Michael Romeo",
+          "Nickalas Cason",
+          "Katherine Fowee Gasaway",
+          "Nathan Esantsi",
+          "Behnam Azimi",
+          "Sean Semper",
+          "Hossein Mohammadkhan",
+          "Grant Hecht",
+          "Joseph Patton",
+          "Liam Greenlee",
+          "Justin Clavette",
+          "Alan Cudmore",
+          "Ian Hammer",
+          "Ted Hendriks",
+          "Terry Stevenson",
+          "Nahum Alem"
+        ],
+        "categories": [
+          "Astronautics (General)"
+        ],
+        "published_at": "2026-08-23",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20260004947",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20260004947/downloads/SSC26%20Starling%20Paper%20-%20STRIVES.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20260004947/downloads/SSC26%20Starling%20Paper%20-%20STRIVES.pdf.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20260004947/downloads/SSC26%20Starling%20Paper%20-%20STRIVES.pdf",
+        "topic_axis": "onboard_ai",
+        "language": "en",
+        "matched_queries": [
+          "autonomous_navigation",
+          "autonomous_planning"
+        ],
+        "query_scores": {
+          "autonomous_navigation": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "SSC26 Starling Paper - STRIVES.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20260004947/downloads/SSC26%20Starling%20Paper%20-%20STRIVES.pdf.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20260004947/downloads/SSC26%20Starling%20Paper%20-%20STRIVES.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20260004947/downloads/SSC26%20Starling%20Paper%20-%20STRIVES.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "GSFC",
+          "center_name": "Goddard Space Flight Center",
+          "technical_review_type": "SINGLE_EXPERT",
+          "submitted_date": "2026-06-05T13:52:36.6513050+00:00",
+          "distribution_date": "2026-08-23T04:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [
+            "Autonomy",
+            "GN&C"
+          ],
+          "other_report_numbers": [],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "spacecraft",
+            "onboard",
+            "autonomy",
+            "autonomous",
+            "planning",
+            "navigation",
+            "guidance"
+          ],
+          "axis_keyword_hit_count": 7,
+          "matched_query_count": 2,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 6,
+          "reason": "real-time autonomous guidance, navigation, control을 spacecraft onboard에서 수행하는 autoNGC flight-test 자료."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20260001759",
+        "title": "CAPSTONE Extended Mission: A Cislunar Testbed for Autonomous SmallSat Technologies",
+        "abstract": "The Cislunar Autonomous Positioning System Technology Operations and Navigation Experiment (CAPSTONE) is a 12U small satellite technology demonstration mission supporting NASA’s return to the Moon. Managed by NASA’s Small Spacecraft & Distributed Systems (SSDS) program, formerly the Small Spacecraft Technology program, within the Space Technology Mission Directorate, CAPSTONE exemplifies the program’s charter to rapidly develop and demonstrate capabilities for small spacecraft applicable to exploration, science and the commercial space sector. CAPSTONE was originally funded by SSDS as a pathfinder for Gateway, a Moon-orbiting outpost part of NASA’s Artemis program. The mission reduced risk for future cislunar missions by validating innovative navigation technologies and characterizing the dynamics of the Near Rectilinear Halo Orbit (NRHO). CAPSTONE launched on June 28, 2022, onboard a three-stage Rocket Lab Electron vehicle, successfully completing its primary mission objectives in 2024. To increase the value of this existing on-orbit spacecraft, NASA extended its partnership with Advanced Space of Westminster, Colorado to continue CAPSTONE’s operations past the primary mission. The extended mission advances space technologies, further characterizes the lunar orbital environment, and provides additional operational insight to support Artemis mission planning. Current operations are planned to continue for 18 months beyond the primary mission. In collaboration with NASA’s Goddard Space Flight Center (GSFC), CAPSTONE will demonstrate and test technologies that enable autonomy and standards-based, interoperable communications and networking in the challenging cislunar environment. This paper highlights several planned experiments for this lunar orbital asset. 1. Software-Defined Satellite: On Earth, when we suspect the compromise of a computer or simply want to repurpose it, we wipe the machine back to bare metal and rebuild it with a new operating system and applications. Spacecraft use flight computers and performing such operations on orbit has not been possible. Using data and experiences from on-going CAPSTONE flight tests, we’ll discuss NASA’s Software-Defined Satellite experimentation. NASA will demonstrate fundamental operations required to repurpose an on-orbit spacecraft. These include securely rewriting the field-programmable gate array (FPGA) bitstream, wiping and replacing an operating system kernel, upgrading core Flight System (cFS) applications, and rebuilding the user applications. The extended mission demonstrates how an existing commercial spacecraft can be repurposed remotely - from a distance of about 400,000 kilometers - to test new concepts and applications. 2. Autonomous Navigation, Guidance and Control (AutoNGC): Current spacecraft operations in cislunar and beyond are heavily reliant on ground-based infrastructure and a standing army of personnel. As cislunar and deep-space operations expand in support of sustained lunar presence and future Mars exploration, new approaches to spacecraft navigation are necessary. Assets such as the Deep Space Network (DSN) and Near Space Network (NSN) are limited and increasingly oversubscribed. GSFC’s autoNGC software enables autonomous navigation capability that can greatly reduce reliance on ground infrastructure and allow future deep space missions to operate with a reduced ground footprint. 3. Communications and Networking: CAPSTONE continues to provide a platform to explore and demonstrate novel ways to use its onboard IRIS radio. Demonstrations include data relay with the Lunar Reconnaissance Orbiter to possibly support lunar surface and far side missions, Delay Tolerant Networking demonstrations, and the use of commercial ground stations to communicate with a spacecraft in NRHO. Beyond CAPSTONE’s demonstration of new capabilities, this work highlights the value of extending spacecraft missions to maximize the return on an on-orbit investment, especially in times of constrained budgets. This paper presents lessons learned from conducting experiments in NRHO on a platform that is owned and operated by a commercial entity and explores the unique aspects encountered by experimenters using an “experimentation-as-a-service” concept.",
+        "authors": [
+          "Samson Phan",
+          "Roger C Hunter",
+          "Theresa W Beech",
+          "Elizabeth Geist",
+          "Sun Hur-Diaz",
+          "Lucie Tran",
+          "Brad Cheetham",
+          "Alec T Forsman",
+          "Julianna L Fishman"
+        ],
+        "categories": [
+          "Spacecraft Design, Testing and Performance"
+        ],
+        "published_at": "2026-05-04",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20260001759",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20260001759/downloads/87_Phan-Samson_Paper-FINAL.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20260001759/downloads/87_Phan-Samson_Paper-FINAL.pdf.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20260001759/downloads/87_Phan-Samson_Paper-FINAL.pdf",
+        "topic_axis": "onboard_ai",
+        "language": "en",
+        "matched_queries": [
+          "deep_space_autonomy",
+          "deep_space_navigation",
+          "autonomous_planning"
+        ],
+        "query_scores": {
+          "deep_space_autonomy": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "87_Phan-Samson_Paper-FINAL.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20260001759/downloads/87_Phan-Samson_Paper-FINAL.pdf.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20260001759/downloads/87_Phan-Samson_Paper-FINAL.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20260001759/downloads/87_Phan-Samson_Paper-FINAL.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "ARC",
+          "center_name": "Ames Research Center",
+          "technical_review_type": "NASA_TECHNICAL_MANAGEMENT",
+          "submitted_date": "2026-03-17T21:38:58.9043350+00:00",
+          "distribution_date": "2026-05-04T07:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [],
+          "other_report_numbers": [],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "spacecraft",
+            "deep space",
+            "onboard",
+            "autonomy",
+            "autonomous",
+            "planning",
+            "navigation",
+            "guidance"
+          ],
+          "axis_keyword_hit_count": 8,
+          "matched_query_count": 3,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 1,
+          "reason": "CAPSTONE을 autonomous SmallSat technology testbed로 다루며 cislunar/deep-space autonomy와 직접 연결됨."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20190029005",
+        "title": "Transitioning Autonomous Systems Technology Research to a Flight Software Environment",
+        "abstract": "NASA has developed methods and algorithms for autonomous spacecraft operations,including automated planning and scheduling, fault diagnostics and impact determination,procedure management and display. Making the transition from technology research tooperational flight software requires overcoming significant technical, programmatic andcultural challenges. Technology research is aimed at developing methods that performspecific functions correctly, but the resulting software may not be designed for flightprocessors with limited CPU, memory and network resources, and may not be easilyintegrated into spacecraft flight software. Our objective in the Autonomous Systems andOperations Project is to make significant strides toward the transformation from technologyto operational use. Our focus was twofold: maturing research grade autonomy software intoa flight software environment using broadly accepted languages and tools; and integratingautonomy applications with each other and with representative systems and their data andcommand interfaces. For a target flight software environment, we chose Core FlightSoftware, developed by Goddard Space Flight Center as a common operating systemindependent framework. Our hardware integration environment was provided by theIntegrated Power and Avionics Systems (iPAS) Lab at Johnson Space Center, in whichvarious subsystem development has been conducted to address engineering challenges forthe vehicles and systems required for long-duration missions into the solar system. The iPASand its network of connected facilities provides realistic subsystem hardware or simulationsof spacecraft power, life support, guidance, navigation and control, and command and datahandling subsystems. Interfaces between autonomy applications and the subsystems beingassessed and controlled were developed, assessed and refined. The hardware and softwareenvironment using CFS and the iPAS facility has proven to be a highly flexible and realisticenvironment in which to rapidly integrate applications in an iterative, low cost setting. Usingthe integration environment we have developed, we will turn our focus to performance andsizing analysis to determine the computational requirements for full-scale deployment ofautonomy technology. Scalability of reasoners and the spacecraft models upon which theyoperate, and robustness across the full range of spacecraft conditions and environments willbe explored and improved. We are making significant contributions to the future programsthat will build the spacecraft that will take humans beyond the Earth-Moon system, in whichprogram Systems Engineers will be able to accurately and confidently design in accurate,robust and mature autonomous operations systems.",
+        "authors": [
+          "Frank, Jeremy",
+          "Aaseng, Gordon B."
+        ],
+        "categories": [
+          "Spacecraft Instrumentation And Astrionics",
+          "Cybernetics, Artificial Intelligence And Robotics"
+        ],
+        "published_at": "2016-09-13",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20190029005",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20190029005/downloads/20190029005.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20190029005/downloads/20190029005.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20190029005/downloads/20190029005.pdf",
+        "topic_axis": "onboard_ai",
+        "language": "en",
+        "matched_queries": [
+          "autonomous_navigation",
+          "autonomous_planning"
+        ],
+        "query_scores": {
+          "autonomous_navigation": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "20190029005.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20190029005/downloads/20190029005.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20190029005/downloads/20190029005.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20190029005/downloads/20190029005.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "ARC",
+          "center_name": "Ames Research Center",
+          "technical_review_type": "NASA_PEER_COMMITTEE",
+          "submitted_date": "2019-08-13T10:24:21.4100000+00:00",
+          "distribution_date": "2019-08-16T10:00:39.6430000+00:00",
+          "status": "CURATED",
+          "keywords": [
+            "Flight Software",
+            "Autonomous Systems"
+          ],
+          "other_report_numbers": [
+            "ARC-E-DAA-TN35174",
+            "Report Number: ARC-E-DAA-TN35174"
+          ],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "spacecraft",
+            "autonomy",
+            "autonomous",
+            "artificial intelligence",
+            "planning",
+            "navigation",
+            "guidance"
+          ],
+          "axis_keyword_hit_count": 7,
+          "matched_query_count": 2,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 7,
+          "reason": "automated planning/scheduling, fault diagnostics 등 autonomous technology를 실제 flight software 환경으로 전환하는 문제를 다룸."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20250002440",
+        "title": "Opportunities for Greater Autonomy for Osiris-Apex Spacecraft Operations at Apophis",
+        "abstract": "After the successful return of samples from asteroid Bennu in September 2023, the OSIRIS-REx spacecraft executed a divert maneuver to initiate a new mission: OSIRIS–Apophis Explorer (APEX). The APEX mission will re-purpose the OSIRIS-REx flight system to rendezvous with and survey the near-Earth asteroid Apophis just after that asteroid’s rare, close approach to Earth in April 2029. This paper will describe some of the unique challenges for the OSIRIS-REx mission operations team at Bennu and present some of the ground and flight updates that are being studied to increase autonomy and reduce the burden on the operations team at Apophis. Mission operations around Bennu were extremely challenging in large part due to its very small size of ~500 meters diameter, the smallest planetary body ever to be orbited by a spacecraft. Close orbits and flybys of Bennu required execution of propulsive maneuvers ranging in velocity from tens of centimeters per second to as little as 0.01 millimeters per second. This, in turn, required extremely precise modeling of small forces acting on the spacecraft and frequent ground-in-the-loop navigation updates, in which optical navigation images were downlinked, used to update a navigation solution in combination with radiometric tracking by the ground team, and subsequently used to update products that were sent up to the spacecraft, all within a 24-hour period. These 24-hour late-update cycles entailed two-shift operations that frequently required personnel to work evenings and weekends, pushing the envelope of what would be sustainable and affordable for a second asteroid encounter. Nevertheless, the APEX mission will characterize Apophis — which with an estimated mean diameter of 340 meters is even smaller than Bennu — at centimeter scales, similar to the dataset collected at Bennu. Given budgetary constraints for the APEX mission and lessons learned from Bennu operations, the team is studying several opportunities to implement more autonomous operations at Apophis. One example includes an expansion of the autonomous onboard navigation process that was utilized during the four-hour sample collection event at Bennu to enable autonomous targeting of most science observations at Apophis, dramatically reducing the number of 24-hour ground updates necessary. Several potential improvements to ground processes and tools are also being considered. The OSIRIS-APEX mission promises to expand scientific knowledge of the solar system by enabling close study of the tidal effects on Apophis from its close encounter with Earth, while demonstrating more autonomous deep space operations techniques that could apply to future missions.",
+        "authors": [
+          "Michael C Moreau",
+          "Coralie D Adam",
+          "Nayessda Castro",
+          "Kenneth M Getzandanner",
+          "Dathon R Golish",
+          "Frank Jaen",
+          "Michael C Nolan",
+          "Christopher D Norman",
+          "Anjani T Polit",
+          "Daniella N DellaGiustina"
+        ],
+        "categories": [
+          "Space Sciences (General)"
+        ],
+        "published_at": "2025-05-26",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20250002440",
+        "pdf_url": null,
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20250002440/downloads/Moreau_2025_SpaceOps_403_STRIVES-PIRA.docx.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20250002440/downloads/Moreau_2025_SpaceOps_403_STRIVES-PIRA.docx",
+        "topic_axis": "onboard_ai",
+        "language": "en",
+        "matched_queries": [
+          "deep_space_autonomy",
+          "autonomous_navigation",
+          "deep_space_navigation"
+        ],
+        "query_scores": {
+          "deep_space_autonomy": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "Moreau_2025_SpaceOps_403_STRIVES-PIRA.docx",
+            "type": "STI",
+            "mimetype": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20250002440/downloads/Moreau_2025_SpaceOps_403_STRIVES-PIRA.docx.txt",
+            "pdf_url": null,
+            "original_url": "https://ntrs.nasa.gov/api/citations/20250002440/downloads/Moreau_2025_SpaceOps_403_STRIVES-PIRA.docx"
+          }
+        ],
+        "metadata": {
+          "center_code": "GSFC",
+          "center_name": "Goddard Space Flight Center",
+          "technical_review_type": "SINGLE_EXPERT",
+          "submitted_date": "2025-03-06T22:56:25.2281300+00:00",
+          "distribution_date": "2025-05-26T04:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [
+            "small body",
+            "autonomous navigation",
+            "asteroid",
+            "Apophis",
+            "Maneuvers",
+            "Navigation",
+            "spacecraft",
+            "operations"
+          ],
+          "other_report_numbers": [
+            "#403"
+          ],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "spacecraft",
+            "deep space",
+            "onboard",
+            "autonomy",
+            "autonomous",
+            "navigation"
+          ],
+          "axis_keyword_hit_count": 6,
+          "matched_query_count": 3,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 10,
+          "reason": "OSIRIS-APEX의 Apophis operations에서 greater spacecraft autonomy를 검토하는 실제 deep-space mission 사례."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20250000634",
+        "title": "Reinforcement Learning for Spacecraft Navigation & Environment Characterization in the Planar-Restricted Two-Body Problem",
+        "abstract": "As science, exploration, and commercial space missions become increasingly complex, so does the need for efficient, autonomous, and integrated spacecraft navigation and operations techniques. Key operational functions, including data collection and transmission, environment characterization, systems constraints, human factors, and navigation, often are intertwined and conflicted. Deep Reinforcement Learning (DRL) offers a framework for addressing integrated spacecraft navigation and planning in an uncertain dynamical environment. The goal of this study is to evaluate the utility of DRL for integrated spacecraft navigation and planning. This is achieved by developing a simple environmental characterization training environment in the Planar-Restricted 2-Body Problem (PR2BP), establishing benchmarks and heuristic baselines, and designing a previously unstudied Markov Decision Process (MDP) formulation. This MDP formulation enables the spacecraft DRL agents to appropriately balance navigation and actuation capabilities. The resulting DRL-derived policy exceeds a random or untrained policy and meets or exceeds the level of performance of a heuristic without actuation. In the process, valuable intuition is gained about the problem with insight into how DRL methods could scale to increasingly more realistic scenarios, including net-work design and training architectures, efficient state space representations, and methods for encouraging exploration in a parametric action space, among others.",
+        "authors": [
+          "Kenneth M Getzandanner",
+          "John R Martin"
+        ],
+        "categories": [
+          "Astronautics (General)",
+          "Astrodynamics",
+          "Cybernetics, Artificial Intelligence and Robotics"
+        ],
+        "published_at": "2025-01-24",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20250000634",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20250000634/downloads/RL_for_Nav_2025_SFM_Preprint.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20250000634/downloads/RL_for_Nav_2025_SFM_Preprint.pdf.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20250000634/downloads/RL_for_Nav_2025_SFM_Preprint.pdf",
+        "topic_axis": "onboard_ai",
+        "language": "en",
+        "matched_queries": [
+          "spacecraft_ai_autonomy",
+          "autonomous_navigation",
+          "autonomous_planning"
+        ],
+        "query_scores": {
+          "spacecraft_ai_autonomy": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "RL_for_Nav_2025_SFM_Preprint.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20250000634/downloads/RL_for_Nav_2025_SFM_Preprint.pdf.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20250000634/downloads/RL_for_Nav_2025_SFM_Preprint.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20250000634/downloads/RL_for_Nav_2025_SFM_Preprint.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "GSFC",
+          "center_name": "Goddard Space Flight Center",
+          "technical_review_type": "NASA_PEER_COMMITTEE",
+          "submitted_date": "2025-01-21T22:54:50.8319110+00:00",
+          "distribution_date": "2025-01-24T05:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [
+            "navigation",
+            " reinforcement learning",
+            "operations",
+            "autonomy",
+            "mission planning"
+          ],
+          "other_report_numbers": [
+            "AAS 25-285"
+          ],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "spacecraft",
+            "autonomous",
+            "artificial intelligence",
+            "decision",
+            "planning",
+            "navigation"
+          ],
+          "axis_keyword_hit_count": 6,
+          "matched_query_count": 3,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 11,
+          "reason": "reinforcement learning을 spacecraft autonomous navigation과 environment characterization에 적용."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "19950017299",
+        "title": "Autonomous spacecraft executive and its application to rendezvous and docking",
+        "abstract": "Autonomy is needed for future spacecraft to solve the problems of human operator overload and transmission delay. This paper describes the autonomous spacecraft executive for rendezvous and docking. It is an onboard expert system and has decision making capability for mission planning of nominal and contingency cases. The executive has been developed and verified using a hardware motion based simulator.",
+        "authors": [
+          "Komura, Fuminobu",
+          "Furuya, Masatoshi",
+          "Sasaki, Toshiro",
+          "Anderson, Robert L.",
+          "Tsugawa, Roy K."
+        ],
+        "categories": [
+          "Spacecraft Design, Testing And Performance"
+        ],
+        "published_at": "1994-10-01",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/19950017299",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/19950017299/downloads/19950017299.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/19950017299/downloads/19950017299.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/19950017299/downloads/19950017299.pdf",
+        "topic_axis": "onboard_ai",
+        "language": "en",
+        "matched_queries": [
+          "autonomous_spacecraft",
+          "spacecraft_ai_autonomy",
+          "autonomous_planning"
+        ],
+        "query_scores": {
+          "autonomous_spacecraft": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "19950017299.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/19950017299/downloads/19950017299.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/19950017299/downloads/19950017299.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/19950017299/downloads/19950017299.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "CDMS",
+          "center_name": "Legacy CDMS",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2013-09-06T23:19:00.0000000+00:00",
+          "distribution_date": "2013-08-29T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [],
+          "other_report_numbers": [],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "spacecraft",
+            "onboard",
+            "autonomy",
+            "autonomous",
+            "decision",
+            "planning"
+          ],
+          "axis_keyword_hit_count": 6,
+          "matched_query_count": 3,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 12,
+          "reason": "transmission delay 문제를 배경으로 onboard expert system, decision making, mission planning executive를 직접 다룸."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "19990052840",
+        "title": "Mission Operations with an Autonomous Agent",
+        "abstract": "The Remote Agent (RA) is an Artificial Intelligence (AI) system which automates some of the tasks normally reserved for human mission operators and performs these tasks autonomously on-board the spacecraft. These tasks include activity generation, sequencing, spacecraft analysis, and failure recovery. The RA will be demonstrated as a flight experiment on Deep Space One (DSI), the first deep space mission of the NASA's New Millennium Program (NMP). As we moved from prototyping into actual flight code development and teamed with ground operators, we made several major extensions to the RA architecture to address the broader operational context in which PA would be used. These extensions support ground operators and the RA sharing a long-range mission profile with facilities for asynchronous ground updates; support ground operators monitoring and commanding the spacecraft at multiple levels of detail simultaneously; and enable ground operators to provide additional knowledge to the RA, such as parameter updates, model updates, and diagnostic information, without interfering with the activities of the RA or leaving the system in an inconsistent state. The resulting architecture supports incremental autonomy, in which a basic agent can be delivered early and then used in an increasingly autonomous manner over the lifetime of the mission. It also supports variable autonomy, as it enables ground operators to benefit from autonomy when L'@ey want it, but does not inhibit them from obtaining a detailed understanding and exercising tighter control when necessary. These issues are critical to the successful development and operation of autonomous spacecraft.",
+        "authors": [
+          "Pell, Barney",
+          "Sawyer, Scott R.",
+          "Muscettola, Nicola",
+          "Smith, Benjamin",
+          "Bernard, Douglas E."
+        ],
+        "categories": [
+          "Cybernetics"
+        ],
+        "published_at": "1998-03-01",
+        "document_type": "PREPRINT",
+        "document_type_details": "Preprint (Draft being sent to journal)",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/19990052840",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/19990052840/downloads/19990052840.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/19990052840/downloads/19990052840.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/19990052840/downloads/19990052840.pdf",
+        "topic_axis": "onboard_ai",
+        "language": "en",
+        "matched_queries": [
+          "deep_space_autonomy",
+          "spacecraft_ai_autonomy"
+        ],
+        "query_scores": {
+          "deep_space_autonomy": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "19990052840.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/19990052840/downloads/19990052840.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/19990052840/downloads/19990052840.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/19990052840/downloads/19990052840.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "ARC",
+          "center_name": "Ames Research Center",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2013-09-06T23:02:00.0000000+00:00",
+          "distribution_date": "2019-07-12T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [],
+          "other_report_numbers": [
+            "RIACS-TR-98.08",
+            "Report Number: RIACS-TR-98.08"
+          ],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "spacecraft",
+            "deep space",
+            "on-board",
+            "autonomy",
+            "autonomous",
+            "artificial intelligence"
+          ],
+          "axis_keyword_hit_count": 6,
+          "matched_query_count": 2,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 13,
+          "reason": "Deep Space One Remote Agent 계열의 AI system이 human mission operator 업무를 spacecraft onboard에서 자율 수행하는 핵심 사례."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20020060783",
+        "title": "A Hybrid Procedural/Deductive Executive for Autonomous Spacecraft",
+        "abstract": "The New Millennium Remote Agent (NMRA) will be the first AI system to control an actual spacecraft. The spacecraft domain places a strong premium on autonomy and requires dynamic recoveries and robust concurrent execution, all in the presence of tight real-time deadlines, changing goals, scarce resource constraints, and a wide variety of possible failures. To achieve this level of execution robustness, we have integrated a procedural executive based on generic procedures with a deductive model-based executive. A procedural executive provides sophisticated control constructs such as loops, parallel activity, locks, and synchronization which are used for robust schedule execution, hierarchical task decomposition, and routine configuration management. A deductive executive provides algorithms for sophisticated state inference and optimal failure recover), planning. The integrated executive enables designers to code knowledge via a combination of procedures and declarative models, yielding a rich modeling capability suitable to the challenges of real spacecraft control. The interface between the two executives ensures both that recovery sequences are smoothly merged into high-level schedule execution and that a high degree of reactivity is retained to effectively handle additional failures during recovery.",
+        "authors": [
+          "Pell, Barney",
+          "Gamble, Edward B.",
+          "Gat, Erann",
+          "Kessing, Ron",
+          "Kurien, James",
+          "Millar, William",
+          "Nayak, P. Pandurang",
+          "Plaunt, Christian",
+          "Williams, Brian C.",
+          "Lau, Sonie"
+        ],
+        "categories": [
+          "Cybernetics, Artificial Intelligence And Robotics"
+        ],
+        "published_at": "1998-01-01",
+        "document_type": "PREPRINT",
+        "document_type_details": "Preprint (Draft being sent to journal)",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20020060783",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20020060783/downloads/20020060783.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20020060783/downloads/20020060783.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20020060783/downloads/20020060783.pdf",
+        "topic_axis": "onboard_ai",
+        "language": "en",
+        "matched_queries": [
+          "autonomous_spacecraft",
+          "spacecraft_ai_autonomy",
+          "autonomous_planning"
+        ],
+        "query_scores": {
+          "autonomous_spacecraft": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "20020060783.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20020060783/downloads/20020060783.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20020060783/downloads/20020060783.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20020060783/downloads/20020060783.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "ARC",
+          "center_name": "Ames Research Center",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2013-09-07T12:46:00.0000000+00:00",
+          "distribution_date": "2019-07-09T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [],
+          "other_report_numbers": [
+            "Rept-632-30",
+            "Report Number: Rept-632-30"
+          ],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "spacecraft",
+            "autonomy",
+            "autonomous",
+            "artificial intelligence",
+            "planning"
+          ],
+          "axis_keyword_hit_count": 5,
+          "matched_query_count": 3,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 22,
+          "reason": "Remote Agent 계열 autonomous spacecraft executive의 real-time execution, dynamic recovery, resource constraint 대응 구조를 다룸."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20180005241",
+        "title": "An Autonomous Power Controller for the NASA Human Deep Space Gateway",
+        "abstract": "Autonomous control of a spacecraft is an enabling technology that must be developed for deep space human exploration. NASA's current long term human space platform, the International Space Station which is in Low Earth Orbit, is in almost continuous communication with ground based mission control. This allows near real-time control of all the vehicle core systems, including power, to be controlled by the ground. As the focus shifts from Low Earth Orbit, communication time-lag and bandwidth limitations beyond geosynchronous orbit does not permit this type of ground based operation. This paper presents the ongoing work at NASA to develop an architecture for autonomous power control system and a vehicle manager which monitors, coordinates, and delegates all the onboard subsystems to enable autonomous control of the complete spacecraft.",
+        "authors": [
+          "Csank, Jeffrey T.",
+          "Soeder, James F.",
+          "Follo, Jeffrey C.",
+          "Muscatello, Matthew J.",
+          "Carbone, Marc A.",
+          "Hau, Yu Hin"
+        ],
+        "categories": [
+          "Cybernetics, Artificial Intelligence And Robotics"
+        ],
+        "published_at": "2018-07-08",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20180005241",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20180005241/downloads/20180005241.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20180005241/downloads/20180005241.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20180005241/downloads/20180005241.pdf",
+        "topic_axis": "onboard_ai",
+        "language": "en",
+        "matched_queries": [
+          "deep_space_autonomy",
+          "autonomous_control"
+        ],
+        "query_scores": {
+          "deep_space_autonomy": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "20180005241.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20180005241/downloads/20180005241.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20180005241/downloads/20180005241.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20180005241/downloads/20180005241.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "GRC",
+          "center_name": "Glenn Research Center",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2018-09-12T12:01:23.4300000+00:00",
+          "distribution_date": "2019-07-12T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [
+            "power control",
+            "Autonomy",
+            "power management and distribution"
+          ],
+          "other_report_numbers": [
+            "GRC-E-DAA-TN56670",
+            "Report Number: GRC-E-DAA-TN56670"
+          ],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "spacecraft",
+            "deep space",
+            "onboard",
+            "autonomous",
+            "artificial intelligence"
+          ],
+          "axis_keyword_hit_count": 5,
+          "matched_query_count": 2,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 24,
+          "reason": "deep-space human exploration에서 ground communication 의존을 줄이기 위한 autonomous spacecraft power control 사례."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20160012788",
+        "title": "Visual Odometry for Autonomous Deep-Space Navigation Project",
+        "abstract": "Autonomous rendezvous and docking (AR&D) is a critical need for manned spaceflight, especially in deep space where communication delays essentially leave crews on their own for critical operations like docking. Previously developed AR&D sensors have been large, heavy, power-hungry, and may still require further development (e.g. Flash LiDAR). Other approaches to vision-based navigation are not computationally efficient enough to operate quickly on slower, flight-like computers. The key technical challenge for visual odometry is to adapt it from the current terrestrial applications it was designed for to function in the harsh lighting conditions of space. This effort leveraged Draper Laboratory's considerable prior development and expertise, benefitting both parties. The algorithm Draper has created is unique from other pose estimation efforts as it has a comparatively small computational footprint (suitable for use onboard a spacecraft, unlike alternatives) and potentially offers accuracy and precision needed for docking. This presents a solution to the AR&D problem that only requires a camera, which is much smaller, lighter, and requires far less power than competing AR&D sensors. We have demonstrated the algorithm's performance and ability to process 'flight-like' imagery formats with a 'flight-like' trajectory, positioning ourselves to easily process flight data from the upcoming 'ISS Selfie' activity and then compare the algorithm's quantified performance to the simulated imagery. This will bring visual odometry beyond TRL 5, proving its readiness to be demonstrated as part of an integrated system. Once beyond TRL 5, visual odometry will be poised to be demonstrated as part of a system in an in-space demo where relative pose is critical, like Orion AR&D, ISS robotic operations, asteroid proximity operations, and more.",
+        "authors": [
+          "Robinson, Shane",
+          "Pedrotty, Sam"
+        ],
+        "categories": [
+          "Spacecraft Design, Testing And Performance"
+        ],
+        "published_at": "2016-11-02",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20160012788",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20160012788/downloads/20160012788.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20160012788/downloads/20160012788.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20160012788/downloads/20160012788.pdf",
+        "topic_axis": "onboard_ai",
+        "language": "en",
+        "matched_queries": [
+          "autonomous_navigation",
+          "deep_space_navigation"
+        ],
+        "query_scores": {
+          "autonomous_navigation": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "20160012788.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20160012788/downloads/20160012788.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20160012788/downloads/20160012788.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20160012788/downloads/20160012788.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "JSC",
+          "center_name": "Johnson Space Center",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2016-10-31T15:53:14.3330000+00:00",
+          "distribution_date": "2019-07-11T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [],
+          "other_report_numbers": [
+            "JSC-CN-37742",
+            "Report Number: JSC-CN-37742"
+          ],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "spacecraft",
+            "deep space",
+            "onboard",
+            "autonomous",
+            "navigation"
+          ],
+          "axis_keyword_hit_count": 5,
+          "matched_query_count": 2,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 25,
+          "reason": "communication delay가 큰 deep-space 환경에서 autonomous rendezvous/docking navigation과 visual odometry를 다룸."
+        }
+      }
+    ],
+    "satellite_autonomy": [
+      {
+        "source": "ntrs",
+        "source_id": "20140010520",
+        "title": "A System for Fault Management and Fault Consequences Analysis for NASA's Deep Space Habitat",
+        "abstract": "NASA's exploration program envisions the utilization of a Deep Space Habitat (DSH) for human exploration of the space environment in the vicinity of Mars and/or asteroids. Communication latencies with ground control of as long as 20+ minutes make it imperative that DSH operations be highly autonomous, as any telemetry-based detection of a systems problem on Earth could well occur too late to assist the crew with the problem. A DSH-based development program has been initiated to develop and test the automation technologies necessary to support highly autonomous DSH operations. One such technology is a fault management tool to support performance monitoring of vehicle systems operations and to assist with real-time decision making in connection with operational anomalies and failures. Toward that end, we are developing Advanced Caution and Warning System (ACAWS), a tool that combines dynamic and interactive graphical representations of spacecraft systems, systems modeling, automated diagnostic analysis and root cause identification, system and mission impact assessment, and mitigation procedure identification to help spacecraft operators (both flight controllers and crew) understand and respond to anomalies more effectively. In this paper, we describe four major architecture elements of ACAWS: Anomaly Detection, Fault Isolation, System Effects Analysis, and Graphic User Interface (GUI), and how these elements work in concert with each other and with other tools to provide fault management support to both the controllers and crew. We then describe recent evaluations and tests of ACAWS on the DSH testbed. The results of these tests support the feasibility and strength of our approach to failure management automation and enhanced operational autonomy",
+        "authors": [
+          "Colombano, Silvano",
+          "Spirkovska, Liljana",
+          "Baskaran, Vijaykumar",
+          "Aaseng, Gordon",
+          "McCann, Robert S.",
+          "Ossenfort, John",
+          "Smith, Irene",
+          "Iverson, David L.",
+          "Schwabacher, Mark"
+        ],
+        "categories": [
+          "Ground Support Systems And Facilities (Space)",
+          "Quality Assurance And Reliability"
+        ],
+        "published_at": "2013-09-10",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20140010520",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20140010520/downloads/20140010520.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20140010520/downloads/20140010520.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20140010520/downloads/20140010520.pdf",
+        "topic_axis": "satellite_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "fault_management",
+          "spacecraft_anomaly_detection",
+          "fault_isolation"
+        ],
+        "query_scores": {
+          "fault_management": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "20140010520.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20140010520/downloads/20140010520.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20140010520/downloads/20140010520.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20140010520/downloads/20140010520.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "ARC",
+          "center_name": "Ames Research Center",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2014-08-08T08:41:02.6570000+00:00",
+          "distribution_date": "2019-07-12T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [
+            "System Effects Analysis",
+            "real time decision making",
+            " Fault Isolation",
+            "Fault management",
+            "Anomaly Detection"
+          ],
+          "other_report_numbers": [
+            "ARC-E-DAA-TN10907",
+            "Report Number: ARC-E-DAA-TN10907"
+          ],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "spacecraft",
+            "fault",
+            "anomaly",
+            "detection",
+            "isolation",
+            "fault management",
+            "monitoring",
+            "autonomy"
+          ],
+          "axis_keyword_hit_count": 8,
+          "matched_query_count": 3,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 1,
+          "reason": "deep-space habitat의 communication latency 하에서 autonomous fault management와 fault consequence analysis를 직접 다룸."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20160001200",
+        "title": "Orion GN&C Fault Management System Verification: Scope And Methodology",
+        "abstract": "In order to ensure long-term ability to meet mission goals and to provide for the safety of the public, ground personnel, and any crew members, nearly all spacecraft include a fault management (FM) system. For a manned vehicle such as Orion, the safety of the crew is of paramount importance. The goal of the Orion Guidance, Navigation and Control (GN&C) fault management system is to detect, isolate, and respond to faults before they can result in harm to the human crew or loss of the spacecraft. Verification of fault management/fault protection capability is challenging due to the large number of possible faults in a complex spacecraft, the inherent unpredictability of faults, the complexity of interactions among the various spacecraft components, and the inability to easily quantify human reactions to failure scenarios. The Orion GN&C Fault Detection, Isolation, and Recovery (FDIR) team has developed a methodology for bounding the scope of FM system verification while ensuring sufficient coverage of the failure space and providing high confidence that the fault management system meets all safety requirements. The methodology utilizes a swarm search algorithm to identify failure cases that can result in catastrophic loss of the crew or the vehicle and rare event sequential Monte Carlo to verify safety and FDIR performance requirements.",
+        "authors": [
+          "Brown, Denise",
+          "Weiler, David",
+          "Flanary, Ronald"
+        ],
+        "categories": [
+          "Space Transportation And Safety",
+          "Quality Assurance And Reliability"
+        ],
+        "published_at": "2016-02-05",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20160001200",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20160001200/downloads/20160001200.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20160001200/downloads/20160001200.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20160001200/downloads/20160001200.pdf",
+        "topic_axis": "satellite_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "spacecraft_fault_detection",
+          "fault_management",
+          "spacecraft_fdir"
+        ],
+        "query_scores": {
+          "spacecraft_fault_detection": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "20160001200.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20160001200/downloads/20160001200.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20160001200/downloads/20160001200.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20160001200/downloads/20160001200.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "JSC",
+          "center_name": "Johnson Space Center",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2016-01-27T12:43:49.1570000+00:00",
+          "distribution_date": "2019-07-11T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [],
+          "other_report_numbers": [
+            "AAS 16-115",
+            "JSC-CN-35124",
+            "Report Number: AAS 16-115",
+            "Report Number: JSC-CN-35124"
+          ],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "spacecraft",
+            "fault",
+            "detection",
+            "isolation",
+            "recovery",
+            "fdir",
+            "fault management"
+          ],
+          "axis_keyword_hit_count": 7,
+          "matched_query_count": 3,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 5,
+          "reason": "Orion GN&C의 fault management system verification을 다뤄 실제 spacecraft FDIR engineering 사례로 적합."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20190003966",
+        "title": "General Purpose Data-Driven System Monitoring for Space Operations",
+        "abstract": "Modern space propulsion and exploration system designs are becoming increasingly sophisticated and complex. Determining the health state of these systems using traditional methods is becoming more difficult as the number of sensors and component interactions grows. Data-driven monitoring techniques have been developed to address these issues by analyzing system operations data to automatically characterize normal system behavior. The Inductive Monitoring System (IMS) is a data-driven system health monitoring software tool that has been successfully applied to several aerospace applications. IMS uses a data mining technique called clustering to analyze archived system data and characterize normal interactions between parameters. This characterization, or model, of nominal operation is stored in a knowledge base that can be used for real-time system monitoring or for analysis of archived events. Ongoing and developing IMS space operations applications include International Space Station flight control, spacecraft vehicle system health management, launch vehicle ground operations, and fleet supportability. As a common thread of discussion this paper will employ the evolution of the IMS data-driven technique as related to several Integrated Systems Health Management (ISHM) elements. Thematically, the projects listed will be used as case studies. The maturation of IMS via projects where it has been deployed or is currently being integrated to aid in fault detection will be described. The paper will also explain how IMS can be used to complement a suite of other ISHM tools, providing initial fault detection support for diagnosis and recovery",
+        "authors": [
+          "David L Iverson",
+          "Rodney Martin",
+          "Mark Schwabacher",
+          "Lilly Spirkovska",
+          "William Taylor",
+          "Ryan Mackey",
+          "J Patrick Castle",
+          "Vijayakumar Baskaran"
+        ],
+        "categories": [
+          "Computer Systems"
+        ],
+        "published_at": "2012-12-10",
+        "document_type": "REPRINT",
+        "document_type_details": "Reprint (Version printed in journal)",
+        "doi": "10.2514/1.54964",
+        "url": "https://ntrs.nasa.gov/citations/20190003966",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20190003966/downloads/20190003966.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20190003966/downloads/20190003966.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20190003966/downloads/20190003966.pdf",
+        "topic_axis": "satellite_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "spacecraft_fault_detection",
+          "health_management"
+        ],
+        "query_scores": {
+          "spacecraft_fault_detection": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "20190003966.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20190003966/downloads/20190003966.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20190003966/downloads/20190003966.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20190003966/downloads/20190003966.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "ARC",
+          "center_name": "Ames Research Center",
+          "technical_review_type": "NASA_PEER_COMMITTEE",
+          "submitted_date": "2019-05-01T20:53:50.5230000+00:00",
+          "distribution_date": "2019-05-01T04:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [
+            "Space Propulsion",
+            "Real Time System",
+            "Fault Detection",
+            "Data Mining Techniques",
+            "Reusable Launch Vehicle",
+            "Flight Control",
+            "Sensors",
+            "ISS",
+            "Integrated Systems Health Management",
+            "System Health Monitoring",
+            "Data Mining",
+            "Space Operations"
+          ],
+          "other_report_numbers": [
+            "ARC-E-DAADN-TN3581"
+          ],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "spacecraft",
+            "fault",
+            "diagnosis",
+            "detection",
+            "recovery",
+            "health management",
+            "monitoring"
+          ],
+          "axis_keyword_hit_count": 7,
+          "matched_query_count": 2,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 6,
+          "reason": "complex space system의 health state를 위한 data-driven monitoring을 다루며 modern anomaly/health monitoring과 연결됨."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20080033120",
+        "title": "Sensor Selection and Data Validation for Reliable Integrated System Health Management",
+        "abstract": "For new access to space systems with challenging mission requirements, effective implementation of integrated system health management (ISHM) must be available early in the program to support the design of systems that are safe, reliable, highly autonomous. Early ISHM availability is also needed to promote design for affordable operations; increased knowledge of functional health provided by ISHM supports construction of more efficient operations infrastructure. Lack of early ISHM inclusion in the system design process could result in retrofitting health management systems to augment and expand operational and safety requirements; thereby increasing program cost and risk due to increased instrumentation and computational complexity. Having the right sensors generating the required data to perform condition assessment, such as fault detection and isolation, with a high degree of confidence is critical to reliable operation of ISHM. Also, the data being generated by the sensors needs to be qualified to ensure that the assessments made by the ISHM is not based on faulty data. NASA Glenn Research Center has been developing technologies for sensor selection and data validation as part of the FDDR (Fault Detection, Diagnosis, and Response) element of the Upper Stage project of the Ares 1 launch vehicle development. This presentation will provide an overview of the GRC approach to sensor selection and data quality validation and will present recent results from applications that are representative of the complexity of propulsion systems for access to space vehicles. A brief overview of the sensor selection and data quality validation approaches is provided below. The NASA GRC developed Systematic Sensor Selection Strategy (S4) is a model-based procedure for systematically and quantitatively selecting an optimal sensor suite to provide overall health assessment of a host system. S4 can be logically partitioned into three major subdivisions: the knowledge base, the down-select iteration, and the final selection analysis. The knowledge base required for productive use of S4 consists of system design information and heritage experience together with a focus on components with health implications. The sensor suite down-selection is an iterative process for identifying a group of sensors that provide good fault detection and isolation for targeted fault scenarios. In the final selection analysis, a statistical evaluation algorithm provides the final robustness test for each down-selected sensor suite. NASA GRC has developed an approach to sensor data qualification that applies empirical relationships, threshold detection techniques, and Bayesian belief theory to a network of sensors related by physics (i.e., analytical redundancy) in order to identify the failure of a given sensor within the network. This data quality validation approach extends the state-of-the-art, from red-lines and reasonableness checks that flag a sensor after it fails, to include analytical redundancy-based methods that can identify a sensor in the process of failing. The focus of this effort is on understanding the proper application of analytical redundancy-based data qualification methods for onboard use in monitoring Upper Stage sensors.",
+        "authors": [
+          "Garg, Sanjay",
+          "Melcher, Kevin J."
+        ],
+        "categories": [
+          "Spacecraft Propulsion And Power"
+        ],
+        "published_at": "2008-05-19",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20080033120",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20080033120/downloads/20080033120.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20080033120/downloads/20080033120.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20080033120/downloads/20080033120.pdf",
+        "topic_axis": "satellite_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "health_management"
+        ],
+        "query_scores": {
+          "health_management": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "20080033120.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20080033120/downloads/20080033120.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20080033120/downloads/20080033120.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20080033120/downloads/20080033120.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "GRC",
+          "center_name": "Glenn Research Center",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2013-08-24T06:41:00.0000000+00:00",
+          "distribution_date": "2019-07-17T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [],
+          "other_report_numbers": [],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "spacecraft",
+            "fault",
+            "diagnosis",
+            "detection",
+            "isolation",
+            "health management",
+            "monitoring"
+          ],
+          "axis_keyword_hit_count": 7,
+          "matched_query_count": 1,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 9,
+          "reason": "reliable integrated system health management에서 sensor selection과 data validation을 다뤄 autonomous health management에 직접적."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20060006365",
+        "title": "Lessons Learned in the Livingstone 2 on Earth Observing One Flight Experiment",
+        "abstract": "The Livingstone 2 (L2) model-based diagnosis software is a reusable diagnostic tool for monitoring complex systems. In 2004, L2 was integrated with the JPL Autonomous Sciencecraft Experiment (ASE) and deployed on-board Goddard's Earth Observing One (EO-1) remote sensing satellite, to monitor and diagnose the EO-1 space science instruments and imaging sequence. This paper reports on lessons learned from this flight experiment. The goals for this experiment, including validation of minimum success criteria and of a series of diagnostic scenarios, have all been successfully net. Long-term operations in space are on-going, as a test of the maturity of the system, with L2 performance remaining flawless. L2 has demonstrated the ability to track the state of the system during nominal operations, detect simulated abnormalities in operations and isolate failures to their root cause fault. Specific advances demonstrated include diagnosis of ambiguity groups rather than a single fault candidate; hypothesis revision given new sensor evidence about the state of the system; and the capability to check for faults in a dynamic system without having to wait until the system is quiescent. The major benefits of this advanced health management technology are to increase mission duration and reliability through intelligent fault protection, and robust autonomous operations with reduced dependency on supervisory operations from Earth. The work-load for operators will be reduced by telemetry of processed state-of-health information rather than raw data. The long-term vision is that of making diagnosis available to the onboard planner or executive, allowing autonomy software to re-plan in order to work around known component failures. For a system that is expected to evolve substantially over its lifetime, as for the International Space Station, the model-based approach has definite advantages over rule-based expert systems and limit-checking fault protection systems, as these do not scale well. The model-based approach facilitates reuse of the L2 diagnostic software; only the model of the system to be diagnosed and telemetry monitoring software has to be rebuilt for a new system or expanded for a growing system. The hierarchical L2 model supports modularity and expendability, and as such is suitable solution for integrated system health management as envisioned for systems-of-systems.",
+        "authors": [
+          "Hayden, Sandra C.",
+          "Sweet, Adam J.",
+          "Shulman, Seth"
+        ],
+        "categories": [
+          "Earth Resources And Remote Sensing"
+        ],
+        "published_at": "2005-01-01",
+        "document_type": "PREPRINT",
+        "document_type_details": "Preprint (Draft being sent to journal)",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20060006365",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20060006365/downloads/20060006365.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20060006365/downloads/20060006365.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20060006365/downloads/20060006365.pdf",
+        "topic_axis": "satellite_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "satellite_autonomous_operations"
+        ],
+        "query_scores": {
+          "satellite_autonomous_operations": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "20060006365.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20060006365/downloads/20060006365.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20060006365/downloads/20060006365.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20060006365/downloads/20060006365.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "ARC",
+          "center_name": "Ames Research Center",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2013-09-07T10:53:00.0000000+00:00",
+          "distribution_date": "2019-07-12T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [],
+          "other_report_numbers": [],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "satellite",
+            "fault",
+            "diagnosis",
+            "health management",
+            "monitoring",
+            "autonomous operations",
+            "autonomy"
+          ],
+          "axis_keyword_hit_count": 7,
+          "matched_query_count": 1,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 10,
+          "reason": "Livingstone 2 model-based diagnosis를 EO-1 satellite에 onboard 배치한 실제 autonomous diagnosis 사례."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20050010075",
+        "title": "Advanced Diagnostic System on Earth Observing One",
+        "abstract": "In this infusion experiment, the Livingstone 2 (L2) model-based diagnosis engine, developed by the Computational Sciences division at NASA Ames Research Center, has been uploaded to the Earth Observing One (EO-1) satellite. L2 is integrated with the Autonomous Sciencecraft Experiment (ASE) which provides an on-board planning capability and a software bridge to the spacecraft's 1773 data bus. Using a model of the spacecraft subsystems, L2 predicts nominal state transitions initiated by control commands, monitors the spacecraft sensors, and, in the case of failure, isolates the fault based on the discrepant observations. Fault detection and isolation is done by determining a set of component modes, including most likely failures, which satisfy the current observations. All mode transitions and diagnoses are telemetered to the ground for analysis. The initial L2 model is scoped to EO-1's imaging instruments and solid state recorder. Diagnostic scenarios for EO-1's nominal imaging timeline are demonstrated by injecting simulated faults on-board the spacecraft. The solid state recorder stores the science images and also hosts: the experiment software. The main objective of the experiment is to mature the L2 technology to Technology Readiness Level (TRL) 7. Experiment results are presented, as well as a discussion of the challenging technical issues encountered. Future extensions may explore coordination with the planner, and model-based ground operations.",
+        "authors": [
+          "Hayden, Sandra C.",
+          "Sweet, Adam J.",
+          "Christa, Scott E.",
+          "Tran, Daniel",
+          "Shulman, Seth"
+        ],
+        "categories": [
+          "Spacecraft Design, Testing And Performance"
+        ],
+        "published_at": "2004-09-28",
+        "document_type": "PREPRINT",
+        "document_type_details": "Preprint (Draft being sent to journal)",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20050010075",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20050010075/downloads/20050010075.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20050010075/downloads/20050010075.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20050010075/downloads/20050010075.pdf",
+        "topic_axis": "satellite_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "satellite_fault_detection",
+          "spacecraft_fault_detection"
+        ],
+        "query_scores": {
+          "satellite_fault_detection": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "20050010075.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20050010075/downloads/20050010075.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20050010075/downloads/20050010075.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20050010075/downloads/20050010075.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "ARC",
+          "center_name": "Ames Research Center",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2013-09-07T11:54:00.0000000+00:00",
+          "distribution_date": "2019-07-12T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [],
+          "other_report_numbers": [
+            "AIAA Paper 2004-6108",
+            "Report Number: AIAA Paper 2004-6108"
+          ],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "spacecraft",
+            "satellite",
+            "fault",
+            "diagnosis",
+            "detection",
+            "isolation"
+          ],
+          "axis_keyword_hit_count": 6,
+          "matched_query_count": 2,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 17,
+          "reason": "EO-1 satellite의 Livingstone 2 model-based diagnostic engine과 onboard planning integration을 다룸."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "19950011120",
+        "title": "Using graphics and expert system technologies to support satellite monitoring at the NASA Goddard Space Flight Center",
+        "abstract": "At NASA's Goddard Space Flight Center, fault-isolation expert systems have been developed to support data monitoring and fault detection tasks in satellite control centers. Based on the lessons learned during these efforts in expert system automation, a new domain-specific expert system development tool named the Generic Spacecraft Analysts Assistant (GenSAA), was developed to facilitate the rapid development and reuse of real-time expert systems to serve as fault-isolation assistants for spacecraft analysts. This paper describes GenSAA's capabilities and how it is supporting monitoring functions of current and future NASA missions for a variety of satellite monitoring applications ranging from subsystem health and safety to spacecraft attitude. Finally, this paper addresses efforts to generalize GenSAA's data interface for more widespread usage throughout the space and commercial industry.",
+        "authors": [
+          "Hughes, Peter M.",
+          "Shirah, Gregory W.",
+          "Luczak, Edward C."
+        ],
+        "categories": [
+          "Ground Support Systems And Facilities (Space)"
+        ],
+        "published_at": "1994-11-01",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/19950011120",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/19950011120/downloads/19950011120.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/19950011120/downloads/19950011120.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/19950011120/downloads/19950011120.pdf",
+        "topic_axis": "satellite_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "satellite_fault_detection",
+          "spacecraft_fault_detection",
+          "fault_isolation"
+        ],
+        "query_scores": {
+          "satellite_fault_detection": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "19950011120.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/19950011120/downloads/19950011120.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/19950011120/downloads/19950011120.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/19950011120/downloads/19950011120.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "CDMS",
+          "center_name": "Legacy CDMS",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2013-09-06T23:13:00.0000000+00:00",
+          "distribution_date": "2013-08-29T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [],
+          "other_report_numbers": [],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "spacecraft",
+            "satellite",
+            "fault",
+            "detection",
+            "isolation",
+            "monitoring"
+          ],
+          "axis_keyword_hit_count": 6,
+          "matched_query_count": 3,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 15,
+          "reason": "NASA Goddard의 satellite monitoring, fault detection, fault isolation expert system을 직접 다룸."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "19940019472",
+        "title": "GenSAA: A tool for advancing satellite monitoring with graphical expert systems",
+        "abstract": "During numerous contacts with a satellite each day, spacecraft analysts must closely monitor real time data for combinations of telemetry parameter values, trends, and other indications that may signify a problem or failure. As satellites become more complex and the number of data items increases, this task is becoming increasingly difficult for humans to perform at acceptable performance levels. At the NASA Goddard Space Flight Center, fault-isolation expert systems have been developed to support data monitoring and fault detection tasks in satellite control centers. Based on the lessons learned during these initial efforts in expert system automation, a new domain-specific expert system development tool named the Generic Spacecraft Analyst Assistant (GenSAA) is being developed to facilitate the rapid development and reuse of real-time expert systems to serve as fault-isolation assistants for spacecraft analysts. Although initially domain-specific in nature, this powerful tool will support the development of highly graphical expert systems for data monitoring purposes throughout the space and commercial industry.",
+        "authors": [
+          "Hughes, Peter M.",
+          "Luczak, Edward C."
+        ],
+        "categories": [
+          "Systems Analysis"
+        ],
+        "published_at": "1993-03-01",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/19940019472",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/19940019472/downloads/19940019472.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/19940019472/downloads/19940019472.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/19940019472/downloads/19940019472.pdf",
+        "topic_axis": "satellite_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "satellite_fault_detection",
+          "spacecraft_fault_detection",
+          "fault_isolation"
+        ],
+        "query_scores": {
+          "satellite_fault_detection": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "19940019472.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/19940019472/downloads/19940019472.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/19940019472/downloads/19940019472.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/19940019472/downloads/19940019472.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "CDMS",
+          "center_name": "Legacy CDMS",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2013-09-06T19:03:00.0000000+00:00",
+          "distribution_date": "2013-08-29T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [],
+          "other_report_numbers": [],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "spacecraft",
+            "satellite",
+            "fault",
+            "detection",
+            "isolation",
+            "monitoring"
+          ],
+          "axis_keyword_hit_count": 6,
+          "matched_query_count": 3,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 16,
+          "reason": "satellite telemetry monitoring과 problem/failure detection을 graphical expert system으로 지원하는 operational monitoring 자료."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "19950020971",
+        "title": "A fuzzy logic intelligent diagnostic system for spacecraft integrated vehicle health management",
+        "abstract": "Due to the complexity of future space missions and the large amount of data involved, greater autonomy in data processing is demanded for mission operations, training, and vehicle health management. In this paper, we develop a fuzzy logic intelligent diagnostic system to perform data reduction, data analysis, and fault diagnosis for spacecraft vehicle health management applications. The diagnostic system contains a data filter and an inference engine. The data filter is designed to intelligently select only the necessary data for analysis, while the inference engine is designed for failure detection, warning, and decision on corrective actions using fuzzy logic synthesis. Due to its adaptive nature and on-line learning ability, the diagnostic system is capable of dealing with environmental noise, uncertainties, conflict information, and sensor faults.",
+        "authors": [
+          "Wu, G. Gordon"
+        ],
+        "categories": [
+          "Cybernetics"
+        ],
+        "published_at": "1995-05-01",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/19950020971",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/19950020971/downloads/19950020971.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/19950020971/downloads/19950020971.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/19950020971/downloads/19950020971.pdf",
+        "topic_axis": "satellite_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "fault_diagnosis",
+          "health_management"
+        ],
+        "query_scores": {
+          "fault_diagnosis": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "19950020971.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/19950020971/downloads/19950020971.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/19950020971/downloads/19950020971.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/19950020971/downloads/19950020971.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "CDMS",
+          "center_name": "Legacy CDMS",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2013-09-06T23:24:00.0000000+00:00",
+          "distribution_date": "2019-06-26T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [],
+          "other_report_numbers": [],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "spacecraft",
+            "fault",
+            "diagnosis",
+            "detection",
+            "health management",
+            "autonomy"
+          ],
+          "axis_keyword_hit_count": 6,
+          "matched_query_count": 2,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 19,
+          "reason": "spacecraft integrated vehicle health management에서 fuzzy-logic 기반 autonomous fault diagnosis를 다룸."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "19930013066",
+        "title": "On-board fault management for autonomous spacecraft",
+        "abstract": "The dynamic nature of the Cargo Transfer Vehicle's (CTV) mission and the high level of autonomy required mandate a complete fault management system capable of operating under uncertain conditions. Such a fault management system must take into account the current mission phase and the environment (including the target vehicle), as well as the CTV's state of health. This level of capability is beyond the scope of current on-board fault management systems. This presentation will discuss work in progress at TRW to apply artificial intelligence to the problem of on-board fault management. The goal of this work is to develop fault management systems. This presentation will discuss work in progress at TRW to apply artificial intelligence to the problem of on-board fault management. The goal of this work is to develop fault management systems that can meet the needs of spacecraft that have long-range autonomy requirements. We have implemented a model-based approach to fault detection and isolation that does not require explicit characterization of failures prior to launch. It is thus able to detect failures that were not considered in the failure and effects analysis. We have applied this technique to several different subsystems and tested our approach against both simulations and an electrical power system hardware testbed. We present findings from simulation and hardware tests which demonstrate the ability of our model-based system to detect and isolate failures, and describe our work in porting the Ada version of this system to a flight-qualified processor. We also discuss current research aimed at expanding our system to monitor the entire spacecraft.",
+        "authors": [
+          "Fesq, Lorraine M.",
+          "Stephan, Amy",
+          "Doyle, Susan C.",
+          "Martin, Eric",
+          "Sellers, Suzanne"
+        ],
+        "categories": [
+          "Spacecraft Design, Testing And Performance"
+        ],
+        "published_at": "1991-01-01",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/19930013066",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/19930013066/downloads/19930013066.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/19930013066/downloads/19930013066.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/19930013066/downloads/19930013066.pdf",
+        "topic_axis": "satellite_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "spacecraft_fault_detection",
+          "fault_management"
+        ],
+        "query_scores": {
+          "spacecraft_fault_detection": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "19930013066.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/19930013066/downloads/19930013066.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/19930013066/downloads/19930013066.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/19930013066/downloads/19930013066.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "CDMS",
+          "center_name": "Legacy CDMS",
+          "technical_review_type": "TECHNICAL_REVIEW_TYPE_NONE",
+          "submitted_date": "2013-09-06T17:58:00.0000000+00:00",
+          "distribution_date": "2013-08-29T00:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [],
+          "other_report_numbers": [],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "spacecraft",
+            "fault",
+            "detection",
+            "isolation",
+            "fault management",
+            "autonomy"
+          ],
+          "axis_keyword_hit_count": 6,
+          "matched_query_count": 2,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 22,
+          "reason": "autonomous spacecraft의 onboard fault management를 mission phase와 environment까지 고려해 다루는 직접적인 fault-management 자료."
+        }
+      },
+      {
+        "source": "ntrs",
+        "source_id": "20250005402",
+        "title": "A Hybrid Model and Data Driven Approach for Anomaly Detection in Space Power Systems",
+        "abstract": "The future of crewed deep space exploration requires advanced system awareness and monitoring techniques to ensure the reliability of critical subsystems such as the electric power system (EPS). Currently, expert systems are used to detect and isolate large abrupt faults such as short circuits are sufficient to safe the power system. More nuanced and subtle fault behavior is analyzed by ground control, where corrective and troubleshooting actions can be made remotely or by the onboard crew. To ensure the safety of the crew, onboard computers are tasked with the detection and diagnosis of faults and disturbances onboard the vehicle. Spacecraft experience additional failure modes on a regular basis after launch that were unplanned, unexpected, or ambiguous, and NASA has identified improved software as a means of lowering the number of failures onboard spacecraft. This paper proposes a novel combination of model-based and data-driven techniques to monitor and identify known normal, faulty, and anomalous behavior. The method is demonstrated against a high-fidelity simulation of the spacecraft EPS and validated against real hardware.",
+        "authors": [
+          "M A Carbone",
+          "M J Muscatello",
+          "A McCormick",
+          "J T Csank",
+          "C ATeubert",
+          "J D Frank"
+        ],
+        "categories": [
+          "Electronics and Electrical Engineering"
+        ],
+        "published_at": "2025-07-25",
+        "document_type": "CONFERENCE_PAPER",
+        "document_type_details": "Conference Paper",
+        "doi": null,
+        "url": "https://ntrs.nasa.gov/citations/20250005402",
+        "pdf_url": "https://ntrs.nasa.gov/api/citations/20250005402/downloads/Carbone_CPper_HybridAnomaly_ASCEND_20250005402.pdf",
+        "fulltext_url": "https://ntrs.nasa.gov/api/citations/20250005402/downloads/Carbone_CPper_HybridAnomaly_ASCEND_20250005402.pdf.txt",
+        "original_url": "https://ntrs.nasa.gov/api/citations/20250005402/downloads/Carbone_CPper_HybridAnomaly_ASCEND_20250005402.pdf",
+        "topic_axis": "satellite_autonomy",
+        "language": "en",
+        "matched_queries": [
+          "spacecraft_anomaly_detection"
+        ],
+        "query_scores": {
+          "spacecraft_anomaly_detection": null
+        },
+        "api_score_max": null,
+        "distribution": "PUBLIC",
+        "disseminated": "DOCUMENT_AND_METADATA",
+        "downloads_available": true,
+        "only_abstract": false,
+        "downloads": [
+          {
+            "name": "Carbone_CPper_HybridAnomaly_ASCEND_20250005402.pdf",
+            "type": "STI",
+            "mimetype": "application/pdf",
+            "draft": false,
+            "fulltext_url": "https://ntrs.nasa.gov/api/citations/20250005402/downloads/Carbone_CPper_HybridAnomaly_ASCEND_20250005402.pdf.txt",
+            "pdf_url": "https://ntrs.nasa.gov/api/citations/20250005402/downloads/Carbone_CPper_HybridAnomaly_ASCEND_20250005402.pdf",
+            "original_url": "https://ntrs.nasa.gov/api/citations/20250005402/downloads/Carbone_CPper_HybridAnomaly_ASCEND_20250005402.pdf"
+          }
+        ],
+        "metadata": {
+          "center_code": "GRC",
+          "center_name": "Glenn Research Center",
+          "technical_review_type": "SINGLE_EXPERT",
+          "submitted_date": "2025-06-03T16:42:47.9888020+00:00",
+          "distribution_date": "2025-07-25T04:00:00.0000000+00:00",
+          "status": "CURATED",
+          "keywords": [
+            "Fault Detection and Diagnosis",
+            "Electrical Power Systems",
+            "Machine Learning"
+          ],
+          "other_report_numbers": [],
+          "source_identifiers": []
+        },
+        "review_signals": {
+          "axis_keyword_hits": [
+            "spacecraft",
+            "fault",
+            "anomaly",
+            "diagnosis",
+            "detection",
+            "monitoring"
+          ],
+          "axis_keyword_hit_count": 6,
+          "matched_query_count": 1,
+          "api_score_max": null
+        },
+        "selection": {
+          "selection_version": "core100_v1",
+          "method": "human_qa",
+          "review_rank": 24,
+          "reason": "space power system에서 model-driven + data-driven anomaly detection을 결합하는 최신 monitoring 사례."
+        }
+      }
+    ]
+  },
+  "provenance": {
+    "collector_version": "core100_v1",
+    "collection_report": "E:\\자료실\\실습\\team-b-database\\data\\reports\\ntrs_core100_collection_report.json",
+    "review_pool_files": {
+      "rover_autonomy": "E:\\자료실\\실습\\team-b-database\\data\\cache\\ntrs\\core100_v1\\rover_autonomy\\_review_pool.json",
+      "onboard_ai": "E:\\자료실\\실습\\team-b-database\\data\\cache\\ntrs\\core100_v1\\onboard_ai\\_review_pool.json",
+      "satellite_autonomy": "E:\\자료실\\실습\\team-b-database\\data\\cache\\ntrs\\core100_v1\\satellite_autonomy\\_review_pool.json"
+    }
+  }
+}
