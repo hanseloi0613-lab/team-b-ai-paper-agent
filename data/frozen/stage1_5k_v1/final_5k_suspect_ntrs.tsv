@@ -1,0 +1,6 @@
+line	source_id	axis	reasons	title
+4152	20100027332	onboard_ai	no_clear_autonomy_anchor	Ares I-X Ground Diagnostic Prototype
+4167	20170007960	onboard_ai	no_clear_autonomy_anchor	Implementation of a Space Communications Cognitive Engine
+4168	20240007261	onboard_ai	no_clear_autonomy_anchor	Evaluating a Cognitive Extension for the Licklider Transmission Protocol in a Spacecraft Emulation Testbed
+4427	20205010016	onboard_ai	no_clear_space_anchor	Inertial Transfer Concept for Autonomous In-Space Assembly
+4433	20260003381	onboard_ai	no_clear_autonomy_anchor	Distributed Actuation for Scalable Attitude Control of an On-Orbit Assembled Space Structure

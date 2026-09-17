@@ -1,0 +1,20 @@
+{
+  "total_documents": 5000,
+  "axis_counts": {
+    "rover_autonomy": 1667,
+    "onboard_ai": 1667,
+    "satellite_autonomy": 1666
+  },
+  "high_risk_count": 0,
+  "review_count": 749,
+  "high_risk_by_axis": {},
+  "review_by_axis": {
+    "rover_autonomy": 37,
+    "onboard_ai": 235,
+    "satellite_autonomy": 477
+  },
+  "thresholds": {
+    "high_risk": 5,
+    "review": 3
+  }
+}

@@ -64,3 +64,30 @@ source_package.bin
 Thumbs.db
 desktop.ini
 data/processed/
+
+# ============================================================
+# TEAM B generated corpus / training artifacts
+# Do not commit large datasets to GitHub.
+# ============================================================
+
+data/stage1_scale/**/documents*.jsonl
+data/stage1_scale/**/documents*.jsonl.*
+data/stage1_scale/**/documents*.bak*
+data/stage1_scale/**/refill*.jsonl
+data/stage1_scale/**/work/
+
+data/frozen/**/*.jsonl
+
+data/processed/**/*.jsonl
+data/processed/**/*.txt
+
+data/cache/**/*.npy
+data/cache/**/*.pt
+data/cache/**/*.pth
+data/cache/**/*.bin
+data/cache/**/*.safetensors
+
+# TEAM B local/generated artifacts
+*.bak_*
+data/checkpoints/
+data/stage1_scale/

@@ -1,0 +1,27 @@
+{
+  "dataset_name": "team_b_stage1_5k",
+  "version": "stage1_5k_v1",
+  "status": "FROZEN",
+  "frozen_at_utc": "2026-09-17T10:54:52.220162+00:00",
+  "documents": 5000,
+  "axis_counts": {
+    "rover_autonomy": 1667,
+    "onboard_ai": 1667,
+    "satellite_autonomy": 1666
+  },
+  "integrity": {
+    "invalid_json": 0,
+    "duplicate_source_id_groups": 0,
+    "duplicate_content_groups": 0,
+    "duplicate_title_groups": 0,
+    "domain_high_risk": 0,
+    "ntrs_manual_review": 5,
+    "ntrs_manual_review_status": "explicit_keep"
+  },
+  "corpus_file": "stage1_5k_clean.jsonl",
+  "corpus_sha256": "20ecd95d4780d64aceb9f5d464c19ecccf2647bab0b71b39e61817b0ea9a6f8f",
+  "git": {
+    "branch": "stage1-freeze-20260917",
+    "commit": "e6c2b09194d42bc35342b271c307ced5372967c1"
+  }
+}

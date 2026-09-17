@@ -1,0 +1,40 @@
+{
+  "status": "REVIEW_REQUIRED",
+  "corpus": "/mnt/e/자료실/실습/team-b-database/data/stage1_scale/stage1_scale_5k_v1/documents.jsonl",
+  "expected_total": 5000,
+  "valid_json_records": 5000,
+  "invalid_json_count": 0,
+  "invalid_json_examples": [],
+  "axis_counts": {
+    "rover_autonomy": 1667,
+    "onboard_ai": 1667,
+    "satellite_autonomy": 1666
+  },
+  "expected_axis_counts": {
+    "rover_autonomy": 1667,
+    "onboard_ai": 1667,
+    "satellite_autonomy": 1666
+  },
+  "axis_exact_match": true,
+  "source_counts": {
+    "arxiv": 4041,
+    "ntrs": 959
+  },
+  "empty_title_count": 0,
+  "empty_title_lines": [],
+  "empty_content_count": 0,
+  "empty_content_lines": [],
+  "duplicate_source_id_groups": 0,
+  "duplicate_source_id_examples": {},
+  "duplicate_content_groups": 0,
+  "duplicate_content_examples": {},
+  "duplicate_title_groups": 0,
+  "duplicate_title_examples": {},
+  "ntrs_manual_review_count": 5,
+  "word_count_stats": {
+    "min": 808,
+    "median": 6064.0,
+    "p95": 16233,
+    "max": 120639
+  }
+}
